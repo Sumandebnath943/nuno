@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect x="10" y="4" width="44" height="56" rx="7" fill="#fff"/>
+  <rect x="13" y="7" width="38" height="50" rx="5" fill="#e8262d"/>
+  <ellipse cx="32" cy="32" rx="14" ry="24" transform="rotate(30 32 32)" fill="#fff"/>
+  <text x="32" y="41" text-anchor="middle" font-family="Arial Black, Arial" font-weight="900" font-size="26" fill="#e8262d" stroke="#1a1a1a" stroke-width="1.5">N</text>
+</svg>
