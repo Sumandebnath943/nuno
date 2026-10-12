@@ -130,7 +130,16 @@ export class HostSession implements Session {
     try {
       const { Peer } = await import('peerjs');
       const peerId = `nuno-${this.roomId.toLowerCase()}-host`;
-      this.peer = new Peer(peerId, { debug: 1 });
+      this.peer = new Peer(peerId, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+          ],
+        },
+      });
 
       this.peer.on('open', (id) => {
         this.lobby.hostPeerId = id;
@@ -416,7 +425,16 @@ export class ClientSession implements Session {
   private async initPeer() {
     try {
       const { Peer } = await import('peerjs');
-      this.peer = new Peer({ debug: 1 });
+      this.peer = new Peer({
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+          ],
+        },
+      });
 
       this.peer.on('open', () => {
         const hostPeerId = `nuno-${this.roomId.toLowerCase()}-host`;

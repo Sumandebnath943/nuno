@@ -11,6 +11,7 @@ interface Props {
   onCreateRoom: (playerCount: number, difficulty: Difficulty, targetScore: number) => void;
   onJoinRoom: (roomId: string) => void;
   onOpenRules: () => void;
+  onOpenCardGallery: () => void;
 }
 
 const AVATARS = ['😎', '🦄', '🦊', '🐉', '🤖', '🍕', '🚀', '🐼', '🥷', '👾', '🦁', '👑'];
@@ -23,6 +24,7 @@ export const HomeMenu: React.FC<Props> = ({
   onCreateRoom,
   onJoinRoom,
   onOpenRules,
+  onOpenCardGallery,
 }) => {
   const [tab, setTab] = useState<'quick' | 'online'>('quick');
   const [playerCount, setPlayerCount] = useState<number>(4);
@@ -48,7 +50,15 @@ export const HomeMenu: React.FC<Props> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={onOpenCardGallery}
+            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer border border-white/10"
+          >
+            <span>🎴</span>
+            <span>Cards</span>
+          </button>
+
           <button
             onClick={onOpenRules}
             className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer border border-white/10"

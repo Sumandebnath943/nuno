@@ -6,6 +6,7 @@ import { HomeMenu } from './components/HomeMenu';
 import { LobbyView } from './components/LobbyView';
 import { GameBoard } from './components/GameBoard';
 import { RulesModal } from './components/RulesModal';
+import { CardGalleryModal } from './components/CardGalleryModal';
 
 function generateRoomId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -37,6 +38,7 @@ export const App: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const sessionRef = useRef<Session | null>(null);
 
   // Check URL query param for room invite on mount
@@ -188,6 +190,7 @@ export const App: React.FC = () => {
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onOpenRules={() => setRulesOpen(true)}
+          onOpenCardGallery={() => setGalleryOpen(true)}
         />
       )}
 
@@ -219,6 +222,9 @@ export const App: React.FC = () => {
 
       {/* Rules Modal */}
       <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
+
+      {/* Card Designs Gallery Modal */}
+      <CardGalleryModal open={galleryOpen} onClose={() => setGalleryOpen(false)} />
     </div>
   );
 };
