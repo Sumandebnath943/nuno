@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ChatMessage, LobbyState, RoomOptions } from '../net/protocol';
-import type { Difficulty } from '../game/types';
+import type { Difficulty, GameMode } from '../game/types';
+import { MODES } from '../game/modes';
 import { Logo } from './ui';
+import { ModeButton, ModePicker } from './ModePicker';
 import { sfx } from '../lib/sound';
 
 interface Props {
@@ -14,17 +16,13 @@ interface Props {
   onUpdateSeat: (index: number, kind: 'bot' | 'human') => void;
   onSendChat: (text: string) => void;
   onLeave: () => void;
+  onOpenRules: (mode: GameMode) => void;
 }
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
   { id: 'chill', label: '☕ Chill' },
   { id: 'normal', label: '⚡ Normal' },
   { id: 'savage', label: '🔥 Savage' },
-];
-const FORMATS = [
-  { score: 0, label: '1 Round' },
-  { score: 250, label: '250 pts' },
-  { score: 500, label: '500 pts' },
 ];
 
 export const LobbyView: React.FC<Props> = ({
@@ -37,8 +35,17 @@ export const LobbyView: React.FC<Props> = ({
   onUpdateSeat,
   onSendChat,
   onLeave,
+  onOpenRules,
 }) => {
   const [chatInput, setChatInput] = useState('');
+  const [picking, setPicking] = useState(false);
+  const mode = lobby.options.mode ?? 'classic';
+  const official = MODES[mode].officialTarget;
+  const formats = [
+    { score: 0, label: '1 Round' },
+    { score: official / 2, label: `${official / 2} pts` },
+    { score: official, label: `${official} pts` },
+  ];
   const [copied, setCopied] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
   const humans = lobby.seats.filter((s) => s.kind !== 'bot').length;
@@ -67,6 +74,14 @@ export const LobbyView: React.FC<Props> = ({
   const opt = <K extends keyof RoomOptions>(key: K, value: RoomOptions[K]) => {
     sfx.click();
     onUpdateOptions({ [key]: value } as Partial<RoomOptions>);
+  };
+
+  /** Switch mode, keeping the same kind of game length (single round, short, official). */
+  const pickMode = (next: GameMode) => {
+    const t = lobby.options.targetScore;
+    const scale = t === 0 ? 0 : t === official ? 1 : 0.5;
+    onUpdateOptions({ mode: next, targetScore: MODES[next].officialTarget * scale });
+    setPicking(false);
   };
 
   return (
@@ -137,7 +152,23 @@ export const LobbyView: React.FC<Props> = ({
             })}
           </div>
 
-          <div className="mt-5 grid gap-4 border-t-2 border-dashed border-[#d8ccb1] pt-4 md:grid-cols-3">
+          <div className="mt-5 border-t-2 border-dashed border-[#d8ccb1] pt-4">
+            <OptionGroup label="Game mode">
+              <div className="max-w-md">
+                <ModeButton mode={mode} onClick={() => (isHost ? setPicking(true) : onOpenRules(mode))} />
+              </div>
+              {!isHost && (
+                <button
+                  onClick={() => onOpenRules(mode)}
+                  className="mt-1.5 text-xs font-bold text-[#6d4ce6] underline underline-offset-2"
+                >
+                  How to play {MODES[mode].name}
+                </button>
+              )}
+            </OptionGroup>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-[auto_1fr_1fr]">
             <OptionGroup label="Seats">
               {isHost ? (
                 <div className="flex items-center gap-2">
@@ -168,7 +199,7 @@ export const LobbyView: React.FC<Props> = ({
                     key={d.id}
                     disabled={!isHost}
                     onClick={() => opt('difficulty', d.id)}
-                    className={`chip h-10 px-1 text-sm disabled:cursor-default ${lobby.options.difficulty === d.id ? 'is-on' : ''}`}
+                    className={`chip h-10 whitespace-nowrap px-1 text-[13px] disabled:cursor-default ${lobby.options.difficulty === d.id ? 'is-on' : ''}`}
                   >
                     {d.label}
                   </button>
@@ -177,12 +208,12 @@ export const LobbyView: React.FC<Props> = ({
             </OptionGroup>
             <OptionGroup label="Game length">
               <div className="grid grid-cols-3 gap-1.5">
-                {FORMATS.map((f) => (
+                {formats.map((f) => (
                   <button
                     key={f.score}
                     disabled={!isHost}
                     onClick={() => opt('targetScore', f.score)}
-                    className={`chip h-10 px-1 text-sm disabled:cursor-default ${lobby.options.targetScore === f.score ? 'is-on' : ''}`}
+                    className={`chip h-10 whitespace-nowrap px-1 text-[13px] disabled:cursor-default ${lobby.options.targetScore === f.score ? 'is-on' : ''}`}
                   >
                     {f.label}
                   </button>
@@ -252,6 +283,8 @@ export const LobbyView: React.FC<Props> = ({
           )}
         </section>
       </main>
+
+      <ModePicker open={picking} value={mode} onClose={() => setPicking(false)} onPick={pickMode} onRules={onOpenRules} />
     </div>
   );
 };

@@ -61,7 +61,7 @@ export function Modal({ open, onClose, children, className = 'max-w-md', backdro
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
+      className="modal-wrap fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
       style={{ background: backdrop, backdropFilter: 'blur(3px)' }}
       onClick={onClose}
     >

@@ -6,6 +6,27 @@ Play solo against smart bots (with 3 difficulty levels) or host P2P multiplayer 
 
 ---
 
+## 🎮 Game modes
+
+Pick a mode before playing, or when creating a room (the host can change it in the lobby). Each mode follows the official rules of the UNO game it's based on — decks, card effects and scoring included.
+
+| Mode | Based on | What's different |
+| --- | --- | --- |
+| **Classic** | UNO | 108 cards, challenge a Wild Draw Four, first to 500. |
+| **No Mercy** | UNO Show 'Em No Mercy | 168 cards. Stack +2/+4/+6/+10 with equal or higher draws, draw until you can play, 0 passes hands, 7 swaps, Skip Everyone, Discard All, Wild Color Roulette. 25 cards and you're knocked out (Mercy Rule). First to 1000. |
+| **Flip** | UNO Flip | 112 two-sided cards. Flip cards turn the whole game to the Dark Side (Draw Five, Skip Everyone, Wild Draw Color) and back. You see the other side of everyone else's cards. Scored by the side the round ends on. |
+| **Attack** | UNO Attack | No drawing: press the card launcher instead. Hit 2, Wild All Hit, Wild Hit-Fire, Trade Hands, Discard All. |
+| **All Wild** | UNO All Wild | Every card is wild. Wild Skip, Skip Two, Reverse, Draw Two, Draw Four, Targeted Draw Two and Forced Swap. |
+| **Spin** | UNO Spin | 20 Spin cards make the next player spin a wheel: Almost NUNO, Discard Number, Discard Color, Draw Red, Draw Blue, Trade Hands, Show Hand, War, and the NUNO Spin race. |
+
+Where a physical game leaves something to chance or doesn't say, NUNO had to pick:
+
+- **Attack launcher** — the real launcher is mechanical and random. NUNO fires nothing 60% of the time, 1–3 cards 25%, 4–6 cards 10% and 7–10 cards 5%.
+- **Spin wheel** — all nine spaces are equally likely. In War, the winning card ends up on top of the pile.
+- **Flip** — if a Flip card turns up a Wild on the discard pile, the player who flipped names the colour.
+
+---
+
 ## ✨ Features
 
 - **Strict Official Rules (No made-up rules)**:
@@ -32,6 +53,7 @@ Play solo against smart bots (with 3 difficulty levels) or host P2P multiplayer 
   - A big NUNO buzzer that lights up when it's time to shout, CATCH buttons when someone forgets, and emoji reactions.
 - **Card art**: every card is a crisp SVG in the classic style (tilted oval, outlined numbers, Skip/Reverse/+2 icons, quartered Wild, fanned Wild Draw Four).
 - **Works on any screen**: desktop, phones in portrait or landscape, 2 to 10 players. The menu fits without scrolling.
+  - On phones: bigger cards, tap once to pick a card up and again to play it, big hands become a swipeable strip, menus open as bottom sheets, and the layout avoids the notch and home bar.
 - Procedural WebAudio sound effects (no audio files to load) and confetti.
 - Keyboard shortcuts: `D` draw, `K` keep the drawn card, `U`/`Space` shout NUNO, `S` sort your hand.
 

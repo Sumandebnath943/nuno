@@ -14,6 +14,9 @@ export function dealDuration(players: number): number {
   return 7 * players * dealStagger(players) + FLIGHT_MS;
 }
 
+/** How long the Spin wheel takes to stop. */
+export const WHEEL_SPIN_MS = 2300;
+
 /** How long the host holds the first move of a round. */
 export function dealPause(players: number): number {
   return dealDuration(players) + 900;

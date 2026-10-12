@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import type { GameView } from '../game/types';
 import { cardPoints } from '../game/cards';
+import { KNOCKOUT_POINTS } from '../game/modes';
 import { CardView } from './CardView';
 import { Modal } from './ui';
 import { sfx } from '../lib/sound';
@@ -37,6 +38,7 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
   if (!open) return null;
 
   const winner = view.players[winnerSeat];
+  const knockouts = view.mode === 'nomercy' ? view.players.filter((p) => p.out).length : 0;
   const standings = view.players.map((p, i) => ({ ...p, seat: i })).sort((a, b) => b.score - a.score);
   const target = view.targetScore;
 
@@ -56,7 +58,12 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
               ? 'You win the round!'
               : `${winner.name} wins the round`}
         </h2>
-        <p className="font-display mt-1 text-lg text-[#6b6385]">+{view.roundPoints} points from everyone's leftover cards</p>
+        <p className="font-display mt-1 text-lg text-[#6b6385]">
+          +{view.roundPoints} points
+          {knockouts > 0
+            ? ` (incl. ${knockouts} knockout${knockouts === 1 ? '' : 's'} × ${KNOCKOUT_POINTS})`
+            : ' from everyone’s leftover cards'}
+        </p>
       </div>
 
       <div className="nice-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 sm:px-6">
@@ -72,6 +79,7 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
               <span className="font-display min-w-0 flex-1 truncate text-left">
                 {p.name}
                 {p.seat === view.me && <span className="text-[#9a93ad]"> (you)</span>}
+                {p.out && <span className="ml-1 rounded bg-[#ffe1e1] px-1 text-xs text-[#b3141c]">💀 OUT</span>}
               </span>
               {target > 0 && (
                 <div className="hidden h-2.5 w-24 overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[#efe6d2] sm:block">
@@ -91,7 +99,7 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
             {view.players.map((p, i) => {
               const cards = view.revealedHands![i] ?? [];
               if (i === winnerSeat || !cards.length) return null;
-              const pts = cards.reduce((s, c) => s + cardPoints(c), 0);
+              const pts = cards.reduce((s, c) => s + cardPoints(c, view.mode), 0);
               return (
                 <div key={p.id} className="flex items-center gap-2">
                   <span className="w-6 text-lg">{p.avatar}</span>

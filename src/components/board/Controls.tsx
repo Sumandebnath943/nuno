@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { Card, Color, GameEvent, GameView, PublicPlayer } from '../../game/types';
-import { cardLabel, COLOR_NAMES } from '../../game/cards';
+import type { Card, Color, GameEvent, GameView, Phase, PublicPlayer } from '../../game/types';
+import { cardLabel, COLOR_NAMES, VALUE_NAMES } from '../../game/cards';
+import { WHEEL_INFO } from '../../lib/modeGuide';
 import { CARD_COLORS } from '../../lib/theme';
 import type { Bubble, Splash } from './useTableFx';
 import { SpeechBubble } from './Seat';
@@ -18,9 +19,11 @@ interface PlateProps {
   compact: boolean;
   bubble?: Bubble;
   onEmote: (emoji: string) => void;
+  /** No Mercy: show how close you are to the 25-card knockout. */
+  mercy?: boolean;
 }
 
-export function MyPlate({ me, count, myTurn, showScore, compact, bubble, onEmote }: PlateProps) {
+export function MyPlate({ me, count, myTurn, showScore, compact, bubble, onEmote, mercy = false }: PlateProps) {
   const [open, setOpen] = useState(false);
   const av = compact ? 40 : 54;
   return (
@@ -40,8 +43,8 @@ export function MyPlate({ me, count, myTurn, showScore, compact, bubble, onEmote
           <div className={`font-display truncate leading-tight ${compact ? 'max-w-[84px] text-sm' : 'max-w-[120px] text-base'}`}>
             {me.name}
           </div>
-          <div className="text-xs font-semibold leading-tight text-[#6b6385]">
-            {count} card{count === 1 ? '' : 's'}
+          <div className={`text-xs font-semibold leading-tight ${mercy && count >= 20 ? 'text-[#d91f27]' : 'text-[#6b6385]'}`}>
+            {mercy ? `${count}/25 cards` : `${count} card${count === 1 ? '' : 's'}`}
             {showScore && ` · ${me.score} pts`}
           </div>
         </div>
@@ -96,7 +99,17 @@ const NUNO_HINT: Record<NunoState, string> = {
   done: 'Shouted!',
 };
 
-export function NunoButton({ state, size, onPress }: { state: NunoState; size: number; onPress: () => void }) {
+export function NunoButton({
+  state,
+  size,
+  onPress,
+  compact = false,
+}: {
+  state: NunoState;
+  size: number;
+  onPress: () => void;
+  compact?: boolean;
+}) {
   const bg =
     state === 'done'
       ? 'radial-gradient(circle at 35% 30%, #7af09a, #22a447 70%)'
@@ -126,13 +139,16 @@ export function NunoButton({ state, size, onPress }: { state: NunoState; size: n
         )}
         {state === 'done' ? '✓' : 'NUNO!'}
       </button>
-      <span
-        className={`font-display mt-2 whitespace-nowrap text-xs uppercase tracking-wider ${
-          state === 'urgent' ? 'text-[#ff8a8e]' : state === 'ready' ? 'text-[var(--yellow)]' : 'text-white/60'
-        }`}
-      >
-        {NUNO_HINT[state]}
-      </span>
+      {/* On phones only the urgent states get a caption, to save room. */}
+      {(!compact || state === 'ready' || state === 'urgent') && (
+        <span
+          className={`font-display mt-2 whitespace-nowrap uppercase tracking-wider ${compact ? 'text-[10px]' : 'text-xs'} ${
+            state === 'urgent' ? 'text-[#ff8a8e]' : state === 'ready' ? 'text-[var(--yellow)]' : 'text-white/60'
+          }`}
+        >
+          {NUNO_HINT[state]}
+        </span>
+      )}
     </div>
   );
 }
@@ -141,18 +157,26 @@ export function NunoButton({ state, size, onPress }: { state: NunoState; size: n
 
 export function SplashText({ splash, x, y, scale }: { splash: Splash | null; x: number; y: number; scale: number }) {
   return (
-    <div className="pointer-events-none absolute z-[48]" style={{ left: x, top: y }} aria-live="polite">
+    // The outer box centres the text; framer-motion owns the inner transform.
+    <div
+      className="pointer-events-none absolute z-[48] flex -translate-x-1/2 -translate-y-1/2 justify-center"
+      style={{ left: x, top: y }}
+      aria-live="polite"
+    >
       <AnimatePresence>
         {splash && (
           <motion.div
             key={splash.id}
-            className="absolute left-0 top-0 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+            className="flex flex-col items-center"
             initial={{ scale: 0.2, opacity: 0, rotate: -12 }}
             animate={{ scale: [0.2, 1.18, 1], opacity: 1, rotate: -5 }}
             exit={{ scale: 1.25, opacity: 0, y: -30, transition: { duration: 0.25 } }}
             transition={{ duration: 0.4, times: [0, 0.65, 1], ease: 'easeOut' }}
           >
-            <span className="font-display whitespace-nowrap leading-none" style={splashStyle(splash.color, scale)}>
+            <span
+              className="font-display whitespace-nowrap leading-none"
+              style={splashStyle(splash.color, scale * Math.min(1, 9 / splash.text.length))}
+            >
               {splash.text}
             </span>
             {splash.small && (
@@ -205,13 +229,32 @@ export function turnHint(view: GameView, playable: number): string {
   const top = view.discardTop[view.discardTop.length - 1];
   switch (view.phase) {
     case 'drawn':
-      return 'You drew a match — play it or keep it';
+      return view.drawnMustPlay ? 'You drew a match — now play it!' : 'You drew a match — play it or keep it';
     case 'chooseColor':
-      return 'Pick the starting colour';
+      return 'Name the colour';
+    case 'roulette':
+      return 'Name a colour — you flip cards until it shows up';
     case 'challenge':
-      return 'Challenge that +4, or take it?';
+      return 'Challenge it, or take it?';
+    case 'launch':
+      return view.launch?.untilFire ? 'Hit the launcher until it fires!' : `Hit the launcher (${view.launch?.presses ?? 1} left)`;
+    case 'spin':
+      return 'Spin the wheel!';
+    case 'wheelPick':
+    case 'unoSpinPick':
+      return 'Choose what to discard';
     case 'play': {
-      if (!playable) return 'No match — draw a card';
+      if (view.stack) {
+        return playable
+          ? `Stack a +${view.stack.last} or bigger — or take +${view.stack.total}`
+          : `Nothing to stack — take +${view.stack.total}`;
+      }
+      if (view.mode === 'allwild') return 'Play any card — or gamble on a draw';
+      if (!playable) {
+        if (view.mode === 'attack') return 'No match — hit the launcher';
+        if (view.mode === 'nomercy') return 'No match — draw until you can play';
+        return 'No match — draw a card';
+      }
       const color = COLOR_NAMES[view.currentColor];
       if (!top || top.color === 'wild') return `Play ${article(color)} ${color} card or a Wild`;
       return `Match ${color} or ${valueName(top)} — or play a Wild`;
@@ -226,9 +269,18 @@ function article(word: string) {
 }
 
 function valueName(c: Card) {
-  const names: Record<string, string> = { skip: 'Skip', reverse: 'Reverse', draw2: '+2' };
-  return names[c.value] ?? c.value;
+  return /^\d$/.test(c.value) ? c.value : (VALUE_NAMES[c.value] ?? c.value);
 }
+
+const WAITING: Partial<Record<Phase, string>> = {
+  chooseColor: ' is naming a colour…',
+  roulette: ' is naming a colour…',
+  challenge: ' is deciding…',
+  launch: ' is hitting the launcher…',
+  spin: ' has to spin…',
+  wheelPick: ' is discarding…',
+  unoSpinPick: ' is discarding…',
+};
 
 export function StatusBanner({
   view,
@@ -243,34 +295,51 @@ export function StatusBanner({
   y: number;
   compact?: boolean;
 }) {
-  const current = view.players[view.current];
-  const mine = view.current === view.me || (view.phase === 'challenge' && view.challenge?.target === view.me);
   if (view.phase === 'roundOver' || view.phase === 'gameOver') return null;
-  const waitingOn = view.phase === 'challenge' && view.challenge ? view.players[view.challenge.target] : current;
+  if (view.phase === 'unoSpinRace') {
+    return (
+      <div
+        className="pointer-events-none absolute z-[26] flex -translate-x-1/2 flex-col items-center"
+        style={{ left: x, top: y }}
+      >
+        <span
+          className={`font-display outline-text whitespace-nowrap leading-none text-[var(--yellow)] animate-buzz ${compact ? 'text-2xl' : 'text-4xl'}`}
+        >
+          RACE!
+        </span>
+        <span className="font-display mt-2 whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.75)] px-3 py-0.5 text-sm text-white">
+          First to call NUNO Spin discards a card
+        </span>
+      </div>
+    );
+  }
+  const who = view.actor ?? view.current;
+  const mine = who === view.me;
+  const waitingOn = view.players[who];
   return (
     <div className="pointer-events-none absolute z-[26] flex -translate-x-1/2 flex-col items-center" style={{ left: x, top: y }}>
       {mine ? (
         <>
           <span
-            key={`me-${view.current}`}
+            key={`me-${view.current}-${view.phase}`}
             className={`font-display outline-text whitespace-nowrap leading-none text-[var(--yellow)] animate-popIn ${compact ? 'text-2xl' : 'text-4xl'}`}
           >
-            YOUR TURN!
+            {view.phase === 'play' || view.phase === 'drawn' ? 'YOUR TURN!' : 'YOUR MOVE!'}
           </span>
           {hint && (
-            <span className="font-display mt-2 whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.75)] px-3 py-0.5 text-sm text-white">
+            <span className="font-display mt-2 max-w-[86vw] truncate whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.75)] px-3 py-0.5 text-sm text-white">
               {hint}
             </span>
           )}
         </>
       ) : (
         <span
-          key={`p-${view.current}`}
-          className="font-display flex items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.7)] px-3 py-1 text-base text-white animate-fadeIn"
+          key={`p-${who}-${view.phase}`}
+          className="font-display flex max-w-[86vw] items-center gap-2 truncate whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.7)] px-3 py-1 text-base text-white animate-fadeIn"
         >
           <span className="text-xl">{waitingOn?.avatar}</span>
           {waitingOn?.name}
-          {view.phase === 'chooseColor' ? ' is picking a colour…' : view.phase === 'challenge' ? ' is deciding…' : '’s turn'}
+          {WAITING[view.phase] ?? (view.stack ? ` must stack or take +${view.stack.total}` : '’s turn')}
         </span>
       )}
     </div>
@@ -284,12 +353,16 @@ export function eventLine(view: GameView): string | null {
     const e: GameEvent = view.events[i];
     switch (e.type) {
       case 'play':
-        return `${name(e.player)} played ${cardLabel(e.card)}${e.chosenColor ? ` → ${COLOR_NAMES[e.chosenColor as Color]}` : ''}`;
+        return `${name(e.player)} played ${cardLabel(e.card)}${e.chosenColor ? ` → ${COLOR_NAMES[e.chosenColor as Color]}` : ''}${
+          e.target !== undefined ? ` on ${name(e.target)}` : ''
+        }`;
       case 'draw':
-        if (e.reason === 'turn') return `${name(e.player)} drew a card`;
+        if (e.reason === 'launch') continue;
+        if (e.reason === 'turn') return `${name(e.player)} drew ${e.count === 1 ? 'a card' : `${e.count} cards`}`;
         return `${name(e.player)} drew ${e.count}`;
       case 'pass':
-        return `${name(e.player)} kept the card and passed`;
+        if (view.mode === 'attack') continue;
+        return `${name(e.player)} passed`;
       case 'firstCard':
         return `First card: ${cardLabel(e.card)}`;
       case 'colorChange':
@@ -298,7 +371,30 @@ export function eventLine(view: GameView): string | null {
       case 'caught':
         return `${name(e.by)} caught ${name(e.player)}!`;
       case 'challenge':
-        return e.guilty ? `${name(e.offender)} was bluffing!` : `${name(e.offender)}'s +4 was legit`;
+        return e.guilty ? `${name(e.offender)} was bluffing!` : `${name(e.offender)} played it legally`;
+      case 'stack':
+        return `+${e.total} stacked on ${name(e.victim)}`;
+      case 'eliminated':
+        return `${name(e.player)} hit 25 cards and is OUT`;
+      case 'swap':
+        return `${name(e.a)} swapped hands with ${name(e.b)}`;
+      case 'passHands':
+        return 'Everyone passed their hand along';
+      case 'flip':
+        return `Flipped to the ${e.side === 'dark' ? 'Dark' : 'Light'} Side`;
+      case 'launch':
+        return `${name(e.player)} hit the launcher: ${e.count ? `${e.count} card${e.count === 1 ? '' : 's'}!` : 'nothing'}`;
+      case 'spin':
+        return `${name(e.player)} spun ${WHEEL_INFO[e.segment].name}`;
+      case 'roulette':
+        return `${name(e.player)} picked ${COLOR_NAMES[e.color]} for the roulette`;
+      case 'discardAll':
+      case 'wheelDiscard':
+        return `${name(e.player)} discarded ${e.count}`;
+      case 'unoSpinCall':
+        return `${name(e.player)} called NUNO Spin first`;
+      case 'skipAll':
+        return `${name(e.player)} skipped everyone`;
       default:
         continue;
     }

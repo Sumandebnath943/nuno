@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { GameView, Intent, Difficulty } from './game/types';
+import type { GameView, Intent, Difficulty, GameMode } from './game/types';
 import type { ChatMessage, LobbyState, RoomOptions } from './net/protocol';
 import { ClientSession, HostSession, LocalSession, type Session } from './net/network';
 import { HomeMenu } from './components/HomeMenu';
 import { LobbyView } from './components/LobbyView';
 import { GameBoard } from './components/GameBoard';
 import { RulesModal } from './components/RulesModal';
-import { CardGalleryModal } from './components/CardGalleryModal';
 import { CardDefs } from './components/CardView';
 import { Logo } from './components/ui';
 
@@ -39,8 +38,11 @@ export const App: React.FC = () => {
   const [yourSeat, setYourSeat] = useState<number>(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [rules, setRules] = useState<{ open: boolean; mode: GameMode; focus: 'rules' | 'cards' }>({
+    open: false,
+    mode: 'classic',
+    focus: 'rules',
+  });
   const sessionRef = useRef<Session | null>(null);
 
   // Check URL query param for room invite on mount
@@ -69,13 +71,11 @@ export const App: React.FC = () => {
     setChatMessages([]);
   };
 
-  const handleQuickPlay = (
-    playerCount: number,
-    difficulty: Difficulty,
-    targetScore: number,
-  ) => {
+  const openRules = (mode: GameMode, focus: 'rules' | 'cards' = 'rules') => setRules({ open: true, mode, focus });
+
+  const handleQuickPlay = (playerCount: number, difficulty: Difficulty, targetScore: number, mode: GameMode) => {
     cleanupSession();
-    const options: RoomOptions = { playerCount, difficulty, targetScore };
+    const options: RoomOptions = { playerCount, difficulty, targetScore, mode };
     const sess = new LocalSession(profile.name, profile.avatar, options, {
       onView: (v) => setView(v),
       onLobby: () => {},
@@ -87,14 +87,10 @@ export const App: React.FC = () => {
     setScreen('game');
   };
 
-  const handleCreateRoom = (
-    playerCount: number,
-    difficulty: Difficulty,
-    targetScore: number,
-  ) => {
+  const handleCreateRoom = (playerCount: number, difficulty: Difficulty, targetScore: number, mode: GameMode) => {
     cleanupSession();
     const roomId = generateRoomId();
-    const options: RoomOptions = { playerCount, difficulty, targetScore };
+    const options: RoomOptions = { playerCount, difficulty, targetScore, mode };
 
     const sess = new HostSession(roomId, profile.name, profile.avatar, options, {
       onView: (v) => {
@@ -190,8 +186,7 @@ export const App: React.FC = () => {
           onQuickPlay={handleQuickPlay}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
-          onOpenRules={() => setRulesOpen(true)}
-          onOpenCardGallery={() => setGalleryOpen(true)}
+          onOpenRules={openRules}
         />
       )}
 
@@ -219,6 +214,7 @@ export const App: React.FC = () => {
           onUpdateSeat={(idx, kind) => session?.updateSeat?.(idx, kind)}
           onSendChat={(text) => session?.sendChat(text)}
           onLeave={handleLeave}
+          onOpenRules={(m) => openRules(m)}
         />
       )}
 
@@ -233,15 +229,16 @@ export const App: React.FC = () => {
           onLeave={handleLeave}
           onNextRound={handleNextRound}
           onNewGame={handleNewGame}
-          onOpenRules={() => setRulesOpen(true)}
+          onOpenRules={() => openRules(view.mode)}
         />
       )}
 
-      {/* Rules Modal */}
-      <RulesModal open={rulesOpen} onClose={() => setRulesOpen(false)} />
-
-      {/* Card Designs Gallery Modal */}
-      <CardGalleryModal open={galleryOpen} onClose={() => setGalleryOpen(false)} />
+      <RulesModal
+        open={rules.open}
+        mode={rules.mode}
+        focus={rules.focus}
+        onClose={() => setRules((r) => ({ ...r, open: false }))}
+      />
     </div>
   );
 };

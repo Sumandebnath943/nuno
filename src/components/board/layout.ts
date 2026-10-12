@@ -34,19 +34,22 @@ export interface BoardLayout {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-export function computeLayout(W: number, H: number, opponents: number): BoardLayout {
+export function computeLayout(W: number, H: number, opponents: number, safe = { top: 0, bottom: 0 }): BoardLayout {
   const mobile = W < 640;
   const short = H < 560;
-  const topBar = short ? 50 : 60;
+  const topBar = (mobile ? 52 : short ? 50 : 60) + safe.top;
 
-  const cw = clamp(Math.min(W * 0.072, H * 0.125), 54, 108);
+  // Phones get bigger cards: they're tapped with thumbs.
+  const cw = mobile
+    ? clamp(Math.min(W * 0.165, (H - safe.top - safe.bottom) * 0.085), 56, 72)
+    : clamp(Math.min(W * 0.072, H * 0.125), 54, 108);
   const ch = cw * 1.55;
   const compactSeats = mobile || short || (opponents >= 6 && W < 1100) || opponents >= 8;
   const seatW = compactSeats ? 78 : 124;
   const seatH = compactSeats ? 88 : 120;
 
   const controlsRow = mobile ? 64 : 0;
-  const handBottom = mobile ? 8 : 14;
+  const handBottom = (mobile ? 8 : 14) + safe.bottom;
   const handTop = H - handBottom - ch - controlsRow;
 
   const tableTop = topBar + seatH / 2 + 6;

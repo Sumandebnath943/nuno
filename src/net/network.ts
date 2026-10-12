@@ -55,7 +55,7 @@ export class LocalSession implements Session {
       ...personas.map((p) => ({ name: p.name, avatar: p.avatar, kind: 'bot' as const })),
     ];
 
-    const state = createGame(seats, this.options.targetScore);
+    const state = createGame(seats, this.options.targetScore, this.options.mode);
     this.host = new GameHost(state, this.options.difficulty);
     this.unsub = this.host.subscribe((s) => {
       this.events.onView(toView(s, 0));
@@ -70,7 +70,7 @@ export class LocalSession implements Session {
   restart() {
     if (!this.host) return;
     const seats: SeatConfig[] = this.host.state.players.map((p) => ({ name: p.name, avatar: p.avatar, kind: p.kind }));
-    this.host.replace(createGame(seats, this.options.targetScore));
+    this.host.replace(createGame(seats, this.options.targetScore, this.options.mode));
   }
 
   sendChat(text: string) {
@@ -122,9 +122,7 @@ export class HostSession implements Session {
   }
 
   private buildSeats(): LobbySeat[] {
-    const seats: LobbySeat[] = [
-      { name: this.playerName, avatar: this.playerAvatar, kind: 'human' },
-    ];
+    const seats: LobbySeat[] = [{ name: this.playerName, avatar: this.playerAvatar, kind: 'human' }];
     const bots = pickPersonas(this.options.playerCount - 1, [this.playerAvatar]);
     for (let i = 1; i < this.options.playerCount; i++) {
       seats.push({
@@ -343,7 +341,7 @@ export class HostSession implements Session {
       kind: s.kind,
     }));
 
-    const state = createGame(seats, this.lobby.options.targetScore);
+    const state = createGame(seats, this.lobby.options.targetScore, this.lobby.options.mode);
     this.host = new GameHost(state, this.lobby.options.difficulty);
 
     this.unsub = this.host.subscribe((s) => {
@@ -364,7 +362,7 @@ export class HostSession implements Session {
   restart() {
     if (!this.host) return;
     const seats: SeatConfig[] = this.lobby.seats.map((s) => ({ name: s.name, avatar: s.avatar, kind: s.kind }));
-    this.host.replace(createGame(seats, this.lobby.options.targetScore));
+    this.host.replace(createGame(seats, this.lobby.options.targetScore, this.lobby.options.mode));
   }
 
   updateSeat(index: number, kind: 'bot' | 'human') {

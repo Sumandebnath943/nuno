@@ -1,8 +1,9 @@
-import type { Difficulty, GameView, Intent } from '../game/types';
+import type { Difficulty, GameMode, GameView, Intent } from '../game/types';
 
 export interface RoomOptions {
   playerCount: number; // 2 to 10
-  targetScore: number; // 0 for quick single round, 250, 500
+  targetScore: number; // 0 for quick single round, otherwise points to win
+  mode: GameMode;
   difficulty: Difficulty;
 }
 

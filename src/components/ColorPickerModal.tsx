@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Card, Color } from '../game/types';
+import type { Card, Color, Side } from '../game/types';
 import { CARD_COLORS, INK } from '../lib/theme';
 import { Modal } from './ui';
 import { sfx } from '../lib/sound';
@@ -7,6 +7,9 @@ import { sfx } from '../lib/sound';
 interface Props {
   open: boolean;
   title?: string;
+  subtitle?: string;
+  /** UNO Flip: the Dark Side has its own four colours. */
+  side?: Side;
   /** Your hand, to show how many cards of each colour you hold. */
   hand?: Card[];
   /** The wild being played (not counted). */
@@ -17,25 +20,41 @@ interface Props {
 
 const R = 100;
 const GAP = 5;
-const WEDGES: { color: Color; d: string; dx: number; dy: number; lx: number; ly: number }[] = [
-  { color: 'red', d: `M0 0 L0 ${-R} A ${R} ${R} 0 0 0 ${-R} 0 Z`, dx: -GAP, dy: -GAP, lx: -46, ly: -40 },
-  { color: 'blue', d: `M0 0 L${R} 0 A ${R} ${R} 0 0 0 0 ${-R} Z`, dx: GAP, dy: -GAP, lx: 46, ly: -40 },
-  { color: 'yellow', d: `M0 0 L${-R} 0 A ${R} ${R} 0 0 0 0 ${R} Z`, dx: -GAP, dy: GAP, lx: -46, ly: 52 },
-  { color: 'green', d: `M0 0 L0 ${R} A ${R} ${R} 0 0 0 ${R} 0 Z`, dx: GAP, dy: GAP, lx: 46, ly: 52 },
+const SLOTS = [
+  { d: `M0 0 L0 ${-R} A ${R} ${R} 0 0 0 ${-R} 0 Z`, dx: -GAP, dy: -GAP, lx: -46, ly: -40 },
+  { d: `M0 0 L${R} 0 A ${R} ${R} 0 0 0 0 ${-R} Z`, dx: GAP, dy: -GAP, lx: 46, ly: -40 },
+  { d: `M0 0 L${-R} 0 A ${R} ${R} 0 0 0 0 ${R} Z`, dx: -GAP, dy: GAP, lx: -46, ly: 52 },
+  { d: `M0 0 L0 ${R} A ${R} ${R} 0 0 0 ${R} 0 Z`, dx: GAP, dy: GAP, lx: 46, ly: 52 },
 ];
+/** Same layout as the quarters on a Wild card. */
+const LAYOUT: Record<Side, Color[]> = {
+  light: ['red', 'blue', 'yellow', 'green'],
+  dark: ['pink', 'teal', 'purple', 'orange'],
+};
 
-export const ColorPickerModal: React.FC<Props> = ({ open, title = 'Pick a colour', hand = [], exclude, onSelect, onCancel }) => {
-  const counts: Record<Color, number> = { red: 0, yellow: 0, green: 0, blue: 0 };
-  for (const c of hand) if (c.id !== exclude && c.color !== 'wild') counts[c.color] += 1;
-  const best = Math.max(...Object.values(counts));
+export const ColorPickerModal: React.FC<Props> = ({
+  open,
+  title = 'Pick a colour',
+  subtitle = 'The next player has to match it. Numbers show how many you hold.',
+  side = 'light',
+  hand = [],
+  exclude,
+  onSelect,
+  onCancel,
+}) => {
+  const WEDGES = SLOTS.map((slot, i) => ({ ...slot, color: LAYOUT[side][i] }));
+  const counts = new Map<Color, number>(WEDGES.map((w) => [w.color, 0]));
+  for (const c of hand) {
+    const k = c.color as Color;
+    if (c.id !== exclude && counts.has(k)) counts.set(k, counts.get(k)! + 1);
+  }
+  const best = Math.max(...counts.values());
 
   return (
     <Modal open={open} onClose={onCancel} className="max-w-sm">
       <div className="p-5 text-center sm:p-6">
         <h2 className="font-display text-3xl">{title}</h2>
-        <p className="mt-1 text-sm font-medium text-[#6b6385]">
-          The next player has to match it. Numbers show how many you hold.
-        </p>
+        <p className="mt-1 text-sm font-medium text-[#6b6385]">{subtitle}</p>
 
         <svg viewBox="-112 -112 224 224" className="mx-auto mt-4 w-60 overflow-visible sm:w-64" role="group" aria-label="Colours">
           <circle r={R + 8} fill={INK} transform="translate(0 7)" />
@@ -44,7 +63,7 @@ export const ColorPickerModal: React.FC<Props> = ({ open, title = 'Pick a colour
               key={w.color}
               role="button"
               tabIndex={0}
-              aria-label={`${w.color}, you hold ${counts[w.color]}`}
+              aria-label={`${w.color}, you hold ${counts.get(w.color)!}`}
               className="wedge cursor-pointer outline-none"
               onClick={() => {
                 sfx.click();
@@ -68,9 +87,9 @@ export const ColorPickerModal: React.FC<Props> = ({ open, title = 'Pick a colour
                 strokeWidth="6"
                 paintOrder="stroke"
               >
-                {counts[w.color]}
+                {counts.get(w.color)!}
               </text>
-              {counts[w.color] === best && best > 0 && (
+              {counts.get(w.color)! === best && best > 0 && (
                 <text
                   x={w.lx}
                   y={w.ly + 18}

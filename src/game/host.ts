@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 import { decideBot, rand, TUNING } from './bot';
 import { actor, changeSeatKind, reduce } from './engine';
-import { dealPause } from './timing';
+import { dealPause, WHEEL_SPIN_MS } from './timing';
 import type { Action, Difficulty, GameState, PlayerKind } from './types';
 
 type Listener = (s: GameState) => void;
@@ -15,7 +15,10 @@ export class GameHost {
   private listeners = new Set<Listener>();
   private turnTimer: ReturnType<typeof setTimeout> | undefined;
   private sideTimers: ReturnType<typeof setTimeout>[] = [];
-  private lastWindow = -1;
+  private raceTimers: ReturnType<typeof setTimeout>[] = [];
+  private lastVulnerable: number | null = null;
+  private lastRace = -1;
+  private lastSpin = -1;
   private destroyed = false;
   private dealtRound = 0;
   private holdUntil = 0;
@@ -48,7 +51,8 @@ export class GameHost {
 
   /** Swap in a brand-new game (e.g. "play again"). */
   replace(state: GameState) {
-    this.lastWindow = -1;
+    this.lastVulnerable = null;
+    this.lastRace = -1;
     this.dealtRound = 0;
     this.setState(state);
   }
@@ -57,6 +61,7 @@ export class GameHost {
     this.destroyed = true;
     clearTimeout(this.turnTimer);
     this.sideTimers.forEach(clearTimeout);
+    this.raceTimers.forEach(clearTimeout);
     this.listeners.clear();
   }
 
@@ -78,21 +83,40 @@ export class GameHost {
       this.holdUntil = Date.now() + dealPause(s.players.length);
     }
 
+    // ── Spin: let everyone watch the wheel stop before anyone reacts.
+    for (let i = s.events.length - 1; i >= 0; i--) {
+      const e = s.events[i];
+      if (e.type !== 'spin') continue;
+      if (e.seq !== this.lastSpin) {
+        this.lastSpin = e.seq;
+        this.holdUntil = Math.max(this.holdUntil, Date.now() + WHEEL_SPIN_MS + 900);
+      }
+      break;
+    }
+
     // ── UNO catch window: let bots (try to) catch, and let forgetful bots remember late.
     if (s.unoVulnerable !== null) {
-      const windowId = this.vulnerableSince(s);
-      if (windowId !== this.lastWindow) {
-        this.lastWindow = windowId;
+      if (s.unoVulnerable !== this.lastVulnerable) {
+        this.lastVulnerable = s.unoVulnerable;
         this.scheduleUnoReactions(s.unoVulnerable);
       }
     } else {
-      this.lastWindow = -1;
+      this.lastVulnerable = null;
+    }
+
+    // ── Spin: everyone races to yell "UNO Spin".
+    if (s.phase === 'unoSpinRace') {
+      if (this.lastRace !== s.seq) {
+        this.lastRace = s.seq;
+        this.scheduleRace();
+      }
+      return;
     }
 
     // ── Whose move is it?
     const who = actor(s);
     if (who === null || s.players[who].kind !== 'bot') return;
-    let delay = rand(...t.thinkMs);
+    let delay = s.phase === 'launch' ? rand(450, 850) : s.phase === 'spin' ? rand(700, 1200) : rand(...t.thinkMs);
     // Give humans a fair chance to hit CATCH before the next bot moves on.
     if (s.unoVulnerable !== null && s.unoVulnerable !== who) delay += 1500;
     if (s.phase === 'challenge') delay += 500;
@@ -103,13 +127,21 @@ export class GameHost {
     }, delay);
   }
 
-  /** The seq of the play event that made the current player vulnerable (identifies the window). */
-  private vulnerableSince(s: GameState): number {
-    for (let i = s.events.length - 1; i >= 0; i--) {
-      const e = s.events[i];
-      if (e.type === 'play' && e.player === s.unoVulnerable) return e.seq;
-    }
-    return s.seq;
+  private scheduleRace() {
+    this.raceTimers.forEach(clearTimeout);
+    this.raceTimers = [];
+    const t = TUNING[this.difficulty];
+    this.state.players.forEach((p, i) => {
+      if (p.kind !== 'bot' || p.out || p.hand.length === 0) return;
+      this.raceTimers.push(
+        setTimeout(
+          () => {
+            if (this.state.phase === 'unoSpinRace') this.dispatch({ type: 'unoSpin', player: i });
+          },
+          Math.max(0, this.holdUntil - Date.now()) + rand(...t.raceDelay),
+        ),
+      );
+    });
   }
 
   private scheduleUnoReactions(target: number) {
@@ -119,21 +151,27 @@ export class GameHost {
     const t = TUNING[this.difficulty];
 
     s.players.forEach((p, i) => {
-      if (i === target || p.kind !== 'bot') return;
+      if (i === target || p.kind !== 'bot' || p.out) return;
       if (Math.random() < t.catchChance) {
         this.sideTimers.push(
-          setTimeout(() => {
-            if (this.state.unoVulnerable === target) this.dispatch({ type: 'catch', player: i, target });
-          }, rand(...t.catchDelay)),
+          setTimeout(
+            () => {
+              if (this.state.unoVulnerable === target) this.dispatch({ type: 'catch', player: i, target });
+            },
+            rand(...t.catchDelay),
+          ),
         );
       }
     });
 
     if (s.players[target].kind === 'bot' && Math.random() < t.lateUnoChance) {
       this.sideTimers.push(
-        setTimeout(() => {
-          if (this.state.unoVulnerable === target) this.dispatch({ type: 'uno', player: target });
-        }, rand(800, 2400)),
+        setTimeout(
+          () => {
+            if (this.state.unoVulnerable === target) this.dispatch({ type: 'uno', player: target });
+          },
+          rand(800, 2400),
+        ),
       );
     }
   }

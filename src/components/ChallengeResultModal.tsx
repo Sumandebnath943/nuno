@@ -23,11 +23,11 @@ export const ChallengeResultModal: React.FC<Props> = ({ open, result, me, player
   const headline = result.guilty ? 'Bluff caught!' : 'Not a bluff!';
   const detail = iChallenged
     ? result.guilty
-      ? `${offender.name} had a matching card. They draw 4 and you play on.`
-      : `${offender.name} played it fair. You draw 6 and lose your turn.`
+      ? `${offender.name} had a matching card. They take the penalty and you play on.`
+      : `${offender.name} played it fair. You take the penalty plus 2 and lose your turn.`
     : result.guilty
-      ? `${challenger.name} called your bluff. You draw 4.`
-      : `${challenger.name} challenged and lost. They draw 6!`;
+      ? `${challenger.name} called your bluff. You take the penalty.`
+      : `${challenger.name} challenged and lost. They take the penalty plus 2!`;
 
   const close = () => {
     sfx.click();
