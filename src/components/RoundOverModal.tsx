@@ -1,152 +1,135 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import type { GameView } from '../game/types';
+import { cardPoints } from '../game/cards';
 import { CardView } from './CardView';
+import { Modal } from './ui';
 import { sfx } from '../lib/sound';
+import { CARD_COLORS } from '../lib/theme';
 
 interface Props {
   view: GameView;
   isHost: boolean;
   onNextRound: () => void;
-  onNewGame?: () => void;
+  onNewGame: () => void;
+  onLeave: () => void;
 }
 
-export const RoundOverModal: React.FC<Props> = ({
-  view,
-  isHost,
-  onNextRound,
-  onNewGame,
-}) => {
-  const isGameOver = view.phase === 'gameOver';
-  const isRoundOver = view.phase === 'roundOver';
+export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onNewGame, onLeave }) => {
+  const gameOver = view.phase === 'gameOver';
+  const open = gameOver || view.phase === 'roundOver';
+  const winnerSeat = (gameOver ? view.winner : view.roundWinner) ?? 0;
+  const iWon = winnerSeat === view.me;
 
   useEffect(() => {
-    if (isGameOver || isRoundOver) {
-      const winnerIdx = isGameOver ? view.winner : view.roundWinner;
-      if (winnerIdx === view.me) {
-        sfx.win();
-        confetti({
-          particleCount: 120,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      } else {
-        sfx.lose();
-      }
+    if (!open) return;
+    if (iWon) {
+      sfx.win();
+      const colors = Object.values(CARD_COLORS).map((c) => c.base);
+      confetti({ particleCount: 140, spread: 80, origin: { y: 0.65 }, colors });
+      setTimeout(() => confetti({ particleCount: 80, angle: 60, spread: 60, origin: { x: 0 }, colors }), 250);
+      setTimeout(() => confetti({ particleCount: 80, angle: 120, spread: 60, origin: { x: 1 }, colors }), 400);
+    } else {
+      sfx.lose();
     }
-  }, [isGameOver, isRoundOver, view.winner, view.roundWinner, view.me]);
+  }, [open, iWon, view.round]);
 
-  if (!isGameOver && !isRoundOver) return null;
+  if (!open) return null;
 
-  const winnerSeat = isGameOver ? view.winner! : view.roundWinner!;
   const winner = view.players[winnerSeat];
-  const isMeWinner = winnerSeat === view.me;
+  const standings = view.players.map((p, i) => ({ ...p, seat: i })).sort((a, b) => b.score - a.score);
+  const target = view.targetScore;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-      <div className="bg-gradient-to-b from-[#21163c] to-[#110c22] border-2 border-white/20 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-center shadow-2xl relative overflow-hidden">
-        {/* Confetti decoration / banner */}
-        <div className="text-5xl sm:text-6xl mb-3 animate-bounce-slow">
-          {isGameOver ? '🏆' : isMeWinner ? '🎉' : '👏'}
+    <Modal open className="max-w-lg" backdrop="rgba(10, 8, 30, 0.8)">
+      <div className="relative px-5 pb-5 pt-2 text-center sm:px-6">
+        <div className="relative mx-auto -mt-14 flex h-24 w-24 items-center justify-center rounded-full border-4 border-[var(--ink)] bg-white text-6xl shadow-[0_5px_0_var(--ink)]">
+          {winner.avatar}
+          <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-4xl animate-bob">👑</span>
         </div>
-
-        <h2
-          className="text-3xl sm:text-4xl font-extrabold text-white mb-1 drop-shadow-md"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          {isGameOver ? 'MATCH WINNER!' : 'ROUND OVER!'}
+        <h2 className="font-display mt-3 text-3xl sm:text-4xl">
+          {gameOver
+            ? iWon
+              ? 'You win the game!'
+              : `${winner.name} wins the game!`
+            : iWon
+              ? 'You win the round!'
+              : `${winner.name} wins the round`}
         </h2>
+        <p className="font-display mt-1 text-lg text-[#6b6385]">+{view.roundPoints} points from everyone's leftover cards</p>
+      </div>
 
-        <p className="text-lg text-yellow-300 font-bold mb-4">
-          {winner.avatar} {winner.name} won {isGameOver ? 'the match!' : `the round (+${view.roundPoints} pts)!`}
-        </p>
-
-        {/* Revealed Opponent Hands with their points */}
-        {view.revealedHands && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-3 sm:p-4 mb-5 max-h-56 overflow-y-auto text-left">
-            <div className="text-xs uppercase font-bold text-gray-400 mb-2">Remaining Hands:</div>
-            <div className="space-y-3">
-              {view.players.map((p, idx) => {
-                if (idx === winnerSeat) return null;
-                const hand = view.revealedHands![idx] || [];
-                return (
-                  <div key={p.id} className="border-b border-white/5 pb-2 last:border-0">
-                    <div className="flex justify-between items-center text-xs mb-1.5 text-gray-300">
-                      <span className="font-semibold">
-                        {p.avatar} {p.name}
-                      </span>
-                      <span className="text-yellow-400 font-bold">{hand.length} cards</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {hand.map((c) => (
-                        <CardView key={c.id} card={c} size="xs" />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Score Leaderboard */}
-        <div className="bg-black/30 rounded-2xl p-3 sm:p-4 mb-6 text-left">
-          <div className="text-xs uppercase font-bold text-gray-400 mb-2">Current Standings:</div>
-          <div className="space-y-1.5">
-            {[...view.players]
-              .sort((a, b) => b.score - a.score)
-              .map((p, rank) => (
-                <div
-                  key={p.id}
-                  className={`flex justify-between items-center py-1.5 px-3 rounded-lg text-sm ${
-                    p.id === winner.id ? 'bg-yellow-500/20 text-yellow-300 font-bold' : 'text-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">#{rank + 1}</span>
-                    <span>{p.avatar}</span>
-                    <span>{p.name}</span>
-                  </div>
-                  <div className="font-extrabold">{p.score} pts</div>
+      <div className="nice-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 sm:px-6">
+        {/* Standings */}
+        <div className="rounded-2xl border-[2.5px] border-[var(--ink)] bg-white p-2">
+          {standings.map((p, rank) => (
+            <div
+              key={p.id}
+              className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ${p.seat === winnerSeat ? 'bg-[#fff1a8]' : ''}`}
+            >
+              <span className="font-display w-6 text-center text-[#9a93ad]">{rank + 1}</span>
+              <span className="text-xl">{p.avatar}</span>
+              <span className="font-display min-w-0 flex-1 truncate text-left">
+                {p.name}
+                {p.seat === view.me && <span className="text-[#9a93ad]"> (you)</span>}
+              </span>
+              {target > 0 && (
+                <div className="hidden h-2.5 w-24 overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[#efe6d2] sm:block">
+                  <div className="h-full bg-[var(--yellow)]" style={{ width: `${Math.min(100, (p.score / target) * 100)}%` }} />
                 </div>
-              ))}
-          </div>
-          {view.targetScore > 0 && (
-            <div className="text-center text-xs text-gray-400 mt-2">
-              Target Score: {view.targetScore} pts
+              )}
+              <span className="font-display w-16 text-right">{p.score}</span>
             </div>
-          )}
+          ))}
+          {target > 0 && <div className="mt-1 text-xs font-semibold text-[#9a93ad]">First to {target} points wins</div>}
         </div>
 
-        {/* Action button */}
-        {isHost ? (
-          isGameOver ? (
-            <button
-              onClick={() => {
-                sfx.click();
-                onNewGame?.();
-              }}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 text-white font-extrabold text-base tracking-wider uppercase shadow-lg shadow-green-500/30 transition-transform active:scale-95 cursor-pointer"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              Play Again
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                sfx.deal();
-                onNextRound();
-              }}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-extrabold text-base tracking-wider uppercase shadow-lg shadow-yellow-500/30 transition-transform active:scale-95 cursor-pointer"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              Deal Next Round ➔
-            </button>
-          )
-        ) : (
-          <div className="text-sm text-gray-400 italic">Waiting for host to continue...</div>
+        {/* What everyone was left holding */}
+        {view.revealedHands && (
+          <div className="space-y-2 rounded-2xl border-[2.5px] border-[var(--ink)] bg-white p-3 text-left">
+            <div className="label">Cards left in hand</div>
+            {view.players.map((p, i) => {
+              const cards = view.revealedHands![i] ?? [];
+              if (i === winnerSeat || !cards.length) return null;
+              const pts = cards.reduce((s, c) => s + cardPoints(c), 0);
+              return (
+                <div key={p.id} className="flex items-center gap-2">
+                  <span className="w-6 text-lg">{p.avatar}</span>
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-1">
+                    {cards.map((c) => (
+                      <CardView key={c.id} card={c} width={26} />
+                    ))}
+                  </div>
+                  <span className="font-display shrink-0 text-sm text-[#6b6385]">{pts} pts</span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
-    </div>
+
+      <div className="grid grid-cols-[auto_1fr] gap-3 p-5 sm:px-6">
+        <button onClick={onLeave} className="btn btn-white h-12 px-4 text-lg">
+          Menu
+        </button>
+        {isHost ? (
+          <button
+            onClick={() => {
+              sfx.deal();
+              if (gameOver) onNewGame();
+              else onNextRound();
+            }}
+            className="btn btn-yellow h-12 text-xl"
+            autoFocus
+          >
+            {gameOver ? 'Play again' : 'Deal next round'}
+          </button>
+        ) : (
+          <div className="font-display flex items-center justify-center rounded-2xl bg-[#efe6d2] text-[#6b6385]">
+            Waiting for the host…
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 };

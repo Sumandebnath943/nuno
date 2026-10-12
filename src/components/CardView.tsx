@@ -1,303 +1,295 @@
-import React from 'react';
-import type { Card, CardColor, CardValue } from '../game/types';
+import React, { memo } from 'react';
+import type { Card, Color } from '../game/types';
+import { cardLabel } from '../game/cards';
+import { CARD_COLORS, INK } from '../lib/theme';
+
+// Every card is one 120×186 SVG (the real card ratio), so it stays crisp at any size.
+export const CARD_RATIO = 186 / 120;
+
+const SIZES = { xs: 38, sm: 56, md: 84, lg: 110, xl: 140 } as const;
+export type CardSize = keyof typeof SIZES;
 
 export interface CardViewProps {
-  card?: Card;
+  card?: Pick<Card, 'color' | 'value'> | null;
   faceDown?: boolean;
-  playable?: boolean;
-  selected?: boolean;
-  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
-  rotation?: number;
-  onClick?: () => void;
+  size?: CardSize;
+  /** Width in px (overrides `size`). */
+  width?: number;
+  glow?: boolean;
+  dim?: boolean;
   className?: string;
   style?: React.CSSProperties;
+  onClick?: () => void;
 }
 
-const COLOR_MAP: Record<CardColor, { bg: string; dark: string; glow: string }> = {
-  red: { bg: '#ea262d', dark: '#ad0f14', glow: 'rgba(234, 38, 45, 0.7)' },
-  blue: { bg: '#006cb7', dark: '#00477a', glow: 'rgba(0, 108, 183, 0.7)' },
-  green: { bg: '#009f4d', dark: '#006b34', glow: 'rgba(0, 159, 77, 0.7)' },
-  yellow: { bg: '#ffb703', dark: '#b88200', glow: 'rgba(255, 183, 3, 0.7)' },
-  wild: { bg: '#1c172e', dark: '#100c1c', glow: 'rgba(255, 255, 255, 0.8)' },
-};
+const DISPLAY: React.CSSProperties = { fontFamily: 'var(--font-display)' };
+const OVAL = { cx: 60, cy: 93, rx: 41, ry: 72, rot: 30 };
 
-const SIZE_STYLES = {
-  xs: { width: 44, height: 68, radius: 6, borderWidth: 2.5, fontSize: 13, cornerSize: 9 },
-  sm: { width: 62, height: 96, radius: 8, borderWidth: 3, fontSize: 18, cornerSize: 11 },
-  md: { width: 84, height: 130, radius: 10, borderWidth: 4, fontSize: 26, cornerSize: 14 },
-  lg: { width: 106, height: 164, radius: 12, borderWidth: 4.5, fontSize: 34, cornerSize: 18 },
-  xl: { width: 130, height: 200, radius: 14, borderWidth: 5, fontSize: 42, cornerSize: 22 },
-};
-
-export const CardView: React.FC<CardViewProps> = ({
+export const CardView = memo(function CardView({
   card,
   faceDown = false,
-  playable = false,
-  selected = false,
   size = 'md',
-  rotation = 0,
-  onClick,
+  width,
+  glow = false,
+  dim = false,
   className = '',
-  style = {},
-}) => {
-  const dim = SIZE_STYLES[size];
-
-  if (faceDown || !card) {
-    return (
-      <div
-        onClick={onClick}
-        className={`relative select-none transition-transform duration-200 cursor-pointer ${className}`}
-        style={{
-          width: dim.width,
-          height: dim.height,
-          borderRadius: dim.radius,
-          border: `${dim.borderWidth}px solid #ffffff`,
-          background: 'linear-gradient(145deg, #241c3a, #110e1d)',
-          boxShadow: '0 6px 14px rgba(0,0,0,0.45)',
-          transform: `rotate(${rotation}deg)`,
-          ...style,
-        }}
-      >
-        {/* Card Back Graphic */}
-        <div className="absolute inset-1 rounded-sm flex items-center justify-center overflow-hidden border border-black/40 bg-[#161224]">
-          <div
-            className="absolute w-[110%] h-[68%] rounded-full bg-[#ea262d] flex items-center justify-center shadow-inner"
-            style={{ transform: 'rotate(-28deg)' }}
-          >
-            <span
-              className="text-white font-extrabold tracking-wider"
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: dim.fontSize * 0.9,
-                textShadow: '0 2px 4px rgba(0,0,0,0.8), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
-                letterSpacing: '1px',
-              }}
-            >
-              NUNO
-            </span>
-          </div>
-          {/* Subtle sheen highlight */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 60%)',
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  const colorConf = COLOR_MAP[card.color];
-
+  style,
+  onClick,
+}: CardViewProps) {
+  const w = width ?? SIZES[size];
+  const showBack = faceDown || !card;
   return (
     <div
-      onClick={playable || onClick ? onClick : undefined}
-      className={`relative select-none transition-all duration-200 ${
-        playable ? 'card-playable' : ''
-      } ${selected ? 'ring-4 ring-yellow-300 -translate-y-4' : ''} ${className}`}
-      style={{
-        width: dim.width,
-        height: dim.height,
-        borderRadius: dim.radius,
-        border: `${dim.borderWidth}px solid #ffffff`,
-        background: `linear-gradient(145deg, ${colorConf.bg}, ${colorConf.dark})`,
-        boxShadow: playable
-          ? `0 8px 24px rgba(0,0,0,0.5), 0 0 16px ${colorConf.glow}`
-          : '0 6px 14px rgba(0,0,0,0.4)',
-        transform: `rotate(${rotation}deg)`,
-        ['--glow-color' as string]: colorConf.glow,
-        cursor: playable ? 'pointer' : 'default',
-        ...style,
-      }}
+      onClick={onClick}
+      role="img"
+      aria-label={showBack ? 'Face-down card' : cardLabel(card)}
+      className={`nuno-card ${glow ? 'is-glow' : ''} ${dim ? 'is-dim' : ''} ${onClick ? 'cursor-pointer' : ''} ${className}`}
+      style={{ width: w, height: w * CARD_RATIO, borderRadius: w * 0.1, ...style }}
     >
-      {/* Inner card surface */}
-      <div className="absolute inset-0 rounded-[inherit] overflow-hidden flex items-center justify-center">
-        {/* Center Oval */}
-        <div
-          className="absolute w-[86%] h-[68%] rounded-full bg-white flex items-center justify-center shadow-md overflow-hidden"
-          style={{ transform: 'rotate(-26deg)' }}
-        >
-          {/* If Wild or Wild4, show 4-quadrant background inside oval */}
-          {card.color === 'wild' && (
-            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-              <div className="bg-[#ea262d]" />
-              <div className="bg-[#006cb7]" />
-              <div className="bg-[#ffb703]" />
-              <div className="bg-[#009f4d]" />
-            </div>
-          )}
-
-          {/* Center Glyph */}
-          <div style={{ transform: 'rotate(26deg)' }} className="z-10 flex items-center justify-center">
-            {renderCenterGlyph(card.value, card.color, dim.fontSize)}
-          </div>
-        </div>
-
-        {/* Top-Left Corner Glyph */}
-        <div
-          className="absolute top-1 left-1.5 flex flex-col items-center justify-center leading-none"
-          style={{ fontSize: dim.cornerSize }}
-        >
-          {renderCornerGlyph(card.value, card.color, dim.cornerSize)}
-        </div>
-
-        {/* Bottom-Right Corner Glyph (Flipped 180deg) */}
-        <div
-          className="absolute bottom-1 right-1.5 flex flex-col items-center justify-center leading-none rotate-180"
-          style={{ fontSize: dim.cornerSize }}
-        >
-          {renderCornerGlyph(card.value, card.color, dim.cornerSize)}
-        </div>
-
-        {/* Gloss sheen overlay */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0) 55%)',
-          }}
-        />
-      </div>
+      <svg viewBox="0 0 120 186" width="100%" height="100%" aria-hidden="true">
+        {showBack ? <Back /> : <Face card={card} />}
+      </svg>
     </div>
   );
-};
+});
 
-// ── GLYPH RENDERERS ──────────────────────────────────────────
+// ── faces ───────────────────────────────────────────────────
 
-function renderCenterGlyph(value: CardValue, color: CardColor, fontSize: number) {
-  const textColor = color === 'wild' ? '#ffffff' : COLOR_MAP[color].bg;
+function Face({ card }: { card: Pick<Card, 'color' | 'value'> }) {
+  const wild = card.color === 'wild';
+  const c = wild ? '#fff' : CARD_COLORS[card.color as Color].base;
+  return (
+    <>
+      <rect width="120" height="186" rx="12" fill="#fff" />
+      <rect x="6" y="6" width="108" height="174" rx="8" fill={wild ? 'url(#nf-wild)' : `url(#nf-${card.color})`} />
+      <path d="M6 14 Q6 6 14 6 H84 L6 100 Z" fill="url(#n-sheen)" />
 
+      {card.value === 'wild' ? (
+        <QuarteredOval />
+      ) : (
+        <ellipse
+          cx={OVAL.cx}
+          cy={OVAL.cy}
+          rx={OVAL.rx}
+          ry={OVAL.ry}
+          transform={`rotate(${OVAL.rot} ${OVAL.cx} ${OVAL.cy})`}
+          fill="#fff"
+        />
+      )}
+
+      <g transform={`translate(${OVAL.cx} ${OVAL.cy})`}>
+        <CenterGlyph value={card.value} color={c} />
+      </g>
+
+      <Corner value={card.value} />
+      <g transform="rotate(180 60 93)">
+        <Corner value={card.value} />
+      </g>
+    </>
+  );
+}
+
+function CenterGlyph({ value, color }: { value: Card['value']; color: string }) {
   switch (value) {
     case 'skip':
-      return (
-        <svg
-          viewBox="0 0 40 40"
-          width={fontSize * 1.5}
-          height={fontSize * 1.5}
-          className="drop-shadow-md"
-        >
-          <circle cx="20" cy="20" r="16" fill="none" stroke={textColor} strokeWidth="5" />
-          <line x1="9" y1="9" x2="31" y2="31" stroke={textColor} strokeWidth="5" strokeLinecap="round" />
-        </svg>
-      );
-
+      return <SkipGlyph color={color} />;
     case 'reverse':
-      return (
-        <svg
-          viewBox="0 0 40 40"
-          width={fontSize * 1.5}
-          height={fontSize * 1.5}
-          className="drop-shadow-md"
-        >
-          {/* Top arrow pointing right-down */}
-          <path
-            d="M 10 16 A 10 10 0 0 1 30 16 L 33 11 L 34 22 L 23 21 L 27 17 A 7 7 0 0 0 13 17 Z"
-            fill={textColor}
-          />
-          {/* Bottom arrow pointing left-up */}
-          <path
-            d="M 30 24 A 10 10 0 0 1 10 24 L 7 29 L 6 18 L 17 19 L 13 23 A 7 7 0 0 0 27 23 Z"
-            fill={textColor}
-          />
-        </svg>
-      );
-
+      return <ReverseGlyph color={color} />;
     case 'draw2':
       return (
-        <div
-          className="font-extrabold flex items-center justify-center"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: fontSize * 1.25,
-            color: textColor,
-            textShadow: '0 2px 4px rgba(0,0,0,0.25), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
-          }}
-        >
-          +2
-        </div>
+        <g transform="rotate(-8)">
+          <MiniCard x={-9} y={9} color={color} />
+          <MiniCard x={9} y={-9} color={color} />
+        </g>
       );
-
-    case 'wild':
-      return (
-        <div
-          className="font-extrabold text-white tracking-wider px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-xs border border-white/40"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: fontSize * 0.65,
-            textShadow: '0 2px 4px rgba(0,0,0,0.8), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
-          }}
-        >
-          WILD
-        </div>
-      );
-
     case 'wild4':
       return (
-        <div
-          className="font-extrabold flex items-center justify-center text-white"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: fontSize * 1.4,
-            textShadow: '0 3px 6px rgba(0,0,0,0.9), -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000',
-          }}
-        >
-          +4
-        </div>
+        <g>
+          {(['blue', 'green', 'red', 'yellow'] as Color[]).map((col, i) => (
+            <g key={col} transform={`translate(0 30) rotate(${-33 + i * 22}) translate(0 -36)`}>
+              <MiniCard x={0} y={0} color={CARD_COLORS[col].base} />
+            </g>
+          ))}
+        </g>
       );
-
+    case 'wild':
+      return null;
     default:
-      // Number 0-9
       return (
-        <span
-          className="font-extrabold leading-none"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: fontSize * 1.5,
-            color: textColor,
-            textShadow: '0 2px 4px rgba(0,0,0,0.25), -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
-            textDecoration: value === '6' || value === '9' ? 'underline' : 'none',
-          }}
-        >
-          {value}
-        </span>
+        <g style={DISPLAY} textAnchor="middle" fontSize="88">
+          <text x="3" y="35" fill={INK}>
+            {value}
+          </text>
+          <text x="0" y="31" fill={color} stroke={INK} strokeWidth="6" strokeLinejoin="round" paintOrder="stroke">
+            {value}
+          </text>
+          {(value === '6' || value === '9') && (
+            <rect x="-16" y="38" width="32" height="7" rx="3" fill={color} stroke={INK} strokeWidth="3" />
+          )}
+        </g>
       );
   }
 }
 
-function renderCornerGlyph(value: CardValue, _color: CardColor, size: number) {
-  const commonStyle = {
-    fontFamily: 'var(--font-display)',
-    fontSize: size,
-    color: '#ffffff',
-    textShadow: '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 1px 2px rgba(0,0,0,0.7)',
-  };
-
+function Corner({ value }: { value: Card['value'] }) {
+  const text = (t: string, size = 30) => (
+    <text
+      x="21"
+      y="39"
+      textAnchor="middle"
+      fontSize={size}
+      style={DISPLAY}
+      fill="#fff"
+      stroke={INK}
+      strokeWidth="5"
+      strokeLinejoin="round"
+      paintOrder="stroke"
+    >
+      {t}
+    </text>
+  );
   switch (value) {
     case 'skip':
       return (
-        <svg viewBox="0 0 20 20" width={size * 1.1} height={size * 1.1}>
-          <circle cx="10" cy="10" r="8" fill="none" stroke="#fff" strokeWidth="2.5" />
-          <line x1="4.5" y1="4.5" x2="15.5" y2="15.5" stroke="#fff" strokeWidth="2.5" />
-        </svg>
+        <g transform="translate(21 29) scale(0.36)">
+          <SkipGlyph color="#fff" />
+        </g>
       );
     case 'reverse':
-      return <span style={commonStyle}>⇄</span>;
+      return (
+        <g transform="translate(21 29) scale(0.36)">
+          <ReverseGlyph color="#fff" />
+        </g>
+      );
     case 'draw2':
-      return <span style={commonStyle}>+2</span>;
-    case 'wild':
-      return <span style={{ ...commonStyle, fontSize: size * 0.75 }}>★</span>;
+      return text('+2', 24);
     case 'wild4':
-      return <span style={commonStyle}>+4</span>;
+      return text('+4', 24);
+    case 'wild':
+      return (
+        <g transform="translate(21 29)">
+          <Quarters rx={10} ry={13} stroke={1.5} />
+        </g>
+      );
     default:
       return (
-        <span
-          style={{
-            ...commonStyle,
-            textDecoration: value === '6' || value === '9' ? 'underline' : 'none',
-          }}
-        >
-          {value}
-        </span>
+        <>
+          {text(value)}
+          {(value === '6' || value === '9') && (
+            <rect x="14" y="43" width="14" height="4" rx="1.5" fill="#fff" stroke={INK} strokeWidth="1.5" />
+          )}
+        </>
       );
   }
+}
+
+// ── glyphs (centred on 0,0) ─────────────────────────────────
+
+function SkipGlyph({ color }: { color: string }) {
+  return (
+    <g strokeLinecap="round" fill="none">
+      <circle r="26" stroke={INK} strokeWidth="17" />
+      <line x1="-18" y1="-18" x2="18" y2="18" stroke={INK} strokeWidth="17" />
+      <circle r="26" stroke={color} strokeWidth="10" />
+      <line x1="-18" y1="-18" x2="18" y2="18" stroke={color} strokeWidth="10" />
+    </g>
+  );
+}
+
+const ARROW = 'M -6 27 L 6 27 L 6 -3 L 16 -3 L 0 -28 L -16 -3 L -6 -3 Z';
+function ReverseGlyph({ color }: { color: string }) {
+  const p = { fill: color, stroke: INK, strokeWidth: 5, strokeLinejoin: 'round' as const, paintOrder: 'stroke' };
+  return (
+    <g transform="rotate(45)">
+      <path d={ARROW} transform="translate(-13 3)" {...p} />
+      <path d={ARROW} transform="translate(13 -3) rotate(180)" {...p} />
+    </g>
+  );
+}
+
+function MiniCard({ x, y, color }: { x: number; y: number; color: string }) {
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <rect x="-14" y="-20" width="28" height="40" rx="4" fill="#fff" stroke={INK} strokeWidth="3" />
+      <rect x="-10" y="-16" width="20" height="32" rx="2.5" fill={color} />
+    </g>
+  );
+}
+
+function Quarters({ rx, ry, stroke }: { rx: number; ry: number; stroke: number }) {
+  return (
+    <g>
+      <path d={`M0 0 L0 ${-ry} A ${rx} ${ry} 0 0 0 ${-rx} 0 Z`} fill={CARD_COLORS.red.base} />
+      <path d={`M0 0 L${rx} 0 A ${rx} ${ry} 0 0 0 0 ${-ry} Z`} fill={CARD_COLORS.blue.base} />
+      <path d={`M0 0 L0 ${ry} A ${rx} ${ry} 0 0 0 ${rx} 0 Z`} fill={CARD_COLORS.green.base} />
+      <path d={`M0 0 L${-rx} 0 A ${rx} ${ry} 0 0 0 0 ${ry} Z`} fill={CARD_COLORS.yellow.base} />
+      <ellipse rx={rx} ry={ry} fill="none" stroke="#fff" strokeWidth={stroke} />
+    </g>
+  );
+}
+
+function QuarteredOval() {
+  return (
+    <g transform={`translate(${OVAL.cx} ${OVAL.cy}) rotate(${OVAL.rot})`}>
+      <Quarters rx={OVAL.rx} ry={OVAL.ry} stroke={4} />
+    </g>
+  );
+}
+
+// ── back ────────────────────────────────────────────────────
+
+function Back() {
+  return (
+    <>
+      <rect width="120" height="186" rx="12" fill="#fff" />
+      <rect x="5" y="5" width="110" height="176" rx="8.5" fill="#1d1828" />
+      <ellipse
+        cx={OVAL.cx}
+        cy={OVAL.cy}
+        rx={OVAL.rx + 1}
+        ry={OVAL.ry + 2}
+        transform={`rotate(${OVAL.rot} ${OVAL.cx} ${OVAL.cy})`}
+        fill="url(#nb-red)"
+      />
+      <path d="M5 13 Q5 5 13 5 H80 L5 96 Z" fill="url(#n-sheen)" />
+      <g transform="rotate(-20 60 93)" style={DISPLAY} textAnchor="middle" fontSize="38">
+        <text x="62.5" y="109" fill={INK}>
+          NUNO
+        </text>
+        <text x="60" y="106" fill="#ffd21f" stroke={INK} strokeWidth="6" strokeLinejoin="round" paintOrder="stroke">
+          NUNO
+        </text>
+      </g>
+    </>
+  );
+}
+
+/** Shared gradients for every card. Rendered once at the app root. */
+export function CardDefs() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
+      <defs>
+        {(Object.keys(CARD_COLORS) as Color[]).map((k) => (
+          <linearGradient key={k} id={`nf-${k}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor={CARD_COLORS[k].light} />
+            <stop offset="0.5" stopColor={CARD_COLORS[k].base} />
+            <stop offset="1" stopColor={CARD_COLORS[k].dark} />
+          </linearGradient>
+        ))}
+        <linearGradient id="nf-wild" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#3a3346" />
+          <stop offset="0.5" stopColor="#1d1828" />
+          <stop offset="1" stopColor="#0d0b12" />
+        </linearGradient>
+        <radialGradient id="nb-red" cx="0.4" cy="0.35" r="0.75">
+          <stop offset="0" stopColor="#ff5a5a" />
+          <stop offset="1" stopColor="#c0141d" />
+        </radialGradient>
+        <linearGradient id="n-sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.35" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
 }

@@ -24,11 +24,16 @@ Play solo against smart bots (with 3 difficulty levels) or host P2P multiplayer 
   - **Solo Quick Play**: Instant offline-capable bot games.
   - **P2P Multiplayer (WebRTC via PeerJS)**: Instant room codes & 1-click invite links (`?room=CODE`). In-lobby chat, bot substitution for disconnected players.
   - **3 Bot Difficulties**: Chill (casual & forgiving), Normal (balanced), and Savage (ruthless bluff catcher).
-- **Juicy Graphics & Sound Effects**:
-  - Authentic card designs with classic white oval, glossy sheen, SVG action icons, and 3D card fanning.
-  - Stacked discard pile with authentic casual rotation.
-  - Ambient glowing color aura & orbiting turn-direction indicator.
-  - Procedural WebAudio sound effects (no heavy audio files to load) and confetti explosions!
+- **A table that shows everything**:
+  - Opponents sit around an oval table in real turn order, each with a fanned hand, a big card count, and a "next" tag.
+  - Every card moves: a real deal at the start of each round, draws fly from the deck to the player (face-up when they land in your hand), and plays fly onto the pile.
+  - The table felt takes on the colour in play, and arrows printed on the rim show the direction of play.
+  - Speech bubbles ("+4 😱", "Skipped!", "NUNO!") and big splashes for Skip, Reverse, +2, +4 and Wild.
+  - A big NUNO buzzer that lights up when it's time to shout, CATCH buttons when someone forgets, and emoji reactions.
+- **Card art**: every card is a crisp SVG in the classic style (tilted oval, outlined numbers, Skip/Reverse/+2 icons, quartered Wild, fanned Wild Draw Four).
+- **Works on any screen**: desktop, phones in portrait or landscape, 2 to 10 players. The menu fits without scrolling.
+- Procedural WebAudio sound effects (no audio files to load) and confetti.
+- Keyboard shortcuts: `D` draw, `K` keep the drawn card, `U`/`Space` shout NUNO, `S` sort your hand.
 
 ---
 
@@ -89,5 +94,5 @@ NUNO is configured as a client-side Single Page Application (SPA) powered by Vit
 - **Styling**: Tailwind CSS + Custom Animations
 - **Multiplayer**: WebRTC P2P Data Channels via PeerJS
 - **Audio**: WebAudio API (Zero-asset procedural sound synthesis)
-- **Visuals**: Canvas Confetti, SVG Glyphs, CSS 3D Transforms
+- **Visuals**: SVG card art, Framer Motion card flights, Canvas Confetti
 - **Testing**: Vitest (100% test coverage for official rules)

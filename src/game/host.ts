@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────
 import { decideBot, rand, TUNING } from './bot';
 import { actor, changeSeatKind, reduce } from './engine';
+import { dealPause } from './timing';
 import type { Action, Difficulty, GameState, PlayerKind } from './types';
 
 type Listener = (s: GameState) => void;
@@ -16,6 +17,8 @@ export class GameHost {
   private sideTimers: ReturnType<typeof setTimeout>[] = [];
   private lastWindow = -1;
   private destroyed = false;
+  private dealtRound = 0;
+  private holdUntil = 0;
 
   constructor(state: GameState, difficulty: Difficulty) {
     this.state = state;
@@ -46,6 +49,7 @@ export class GameHost {
   /** Swap in a brand-new game (e.g. "play again"). */
   replace(state: GameState) {
     this.lastWindow = -1;
+    this.dealtRound = 0;
     this.setState(state);
   }
 
@@ -68,6 +72,12 @@ export class GameHost {
     const s = this.state;
     const t = TUNING[this.difficulty];
 
+    // ── A fresh round: let the deal animation finish before anyone moves.
+    if (s.round !== this.dealtRound) {
+      this.dealtRound = s.round;
+      this.holdUntil = Date.now() + dealPause(s.players.length);
+    }
+
     // ── UNO catch window: let bots (try to) catch, and let forgetful bots remember late.
     if (s.unoVulnerable !== null) {
       const windowId = this.vulnerableSince(s);
@@ -86,6 +96,7 @@ export class GameHost {
     // Give humans a fair chance to hit CATCH before the next bot moves on.
     if (s.unoVulnerable !== null && s.unoVulnerable !== who) delay += 1500;
     if (s.phase === 'challenge') delay += 500;
+    delay = Math.max(delay, this.holdUntil - Date.now());
     this.turnTimer = setTimeout(() => {
       const a = decideBot(this.state, who, this.difficulty);
       if (a) this.dispatch(a);

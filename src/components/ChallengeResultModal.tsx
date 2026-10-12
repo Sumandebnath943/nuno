@@ -1,79 +1,66 @@
 import React from 'react';
-import type { Card } from '../game/types';
+import type { GameEvent, PublicPlayer } from '../game/types';
 import { CardView } from './CardView';
+import { Modal } from './ui';
 import { sfx } from '../lib/sound';
+
+type ChallengeEvent = Extract<GameEvent, { type: 'challenge' }>;
 
 interface Props {
   open: boolean;
-  challengerName: string;
-  offenderName: string;
-  guilty: boolean;
-  revealedHand?: Card[];
+  result: ChallengeEvent;
+  me: number;
+  players: PublicPlayer[];
   onClose: () => void;
 }
 
-export const ChallengeResultModal: React.FC<Props> = ({
-  open,
-  challengerName,
-  offenderName,
-  guilty,
-  revealedHand,
-  onClose,
-}) => {
-  if (!open) return null;
+export const ChallengeResultModal: React.FC<Props> = ({ open, result, me, players, onClose }) => {
+  const offender = players[result.offender];
+  const challenger = players[result.challenger];
+  const iChallenged = result.challenger === me;
+  const won = iChallenged ? result.guilty : !result.guilty;
+
+  const headline = result.guilty ? 'Bluff caught!' : 'Not a bluff!';
+  const detail = iChallenged
+    ? result.guilty
+      ? `${offender.name} had a matching card. They draw 4 and you play on.`
+      : `${offender.name} played it fair. You draw 6 and lose your turn.`
+    : result.guilty
+      ? `${challenger.name} called your bluff. You draw 4.`
+      : `${challenger.name} challenged and lost. They draw 6!`;
+
+  const close = () => {
+    sfx.click();
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fadeIn">
-      <div className="bg-gradient-to-b from-[#211638] to-[#120b22] border-2 border-white/20 rounded-3xl p-6 sm:p-8 max-w-lg w-full text-center shadow-2xl animate-scaleUp">
-        <div className="text-5xl mb-3">{guilty ? '💥' : '🛡️'}</div>
-
-        <h2
-          className={`text-2xl sm:text-3xl font-extrabold mb-2 ${
-            guilty ? 'text-red-400' : 'text-green-400'
+    <Modal open={open} onClose={close} className="max-w-md">
+      <div className="p-5 text-center sm:p-6">
+        <div
+          className={`font-display mx-auto w-fit -rotate-6 rounded-2xl border-4 px-5 py-1 text-4xl uppercase animate-popIn ${
+            won ? 'border-[#22a447] text-[#22a447]' : 'border-[#d91f27] text-[#d91f27]'
           }`}
-          style={{ fontFamily: 'var(--font-display)' }}
         >
-          {guilty ? 'GUILTY! BLUFF CAUGHT!' : 'INNOCENT! CHALLENGE FAILED!'}
-        </h2>
+          {headline}
+        </div>
+        <p className="mt-4 font-medium text-[#4d4566]">{detail}</p>
 
-        <p className="text-gray-200 text-sm sm:text-base mb-6 leading-relaxed">
-          {guilty ? (
-            <>
-              <span className="font-bold text-yellow-300">{offenderName}</span> had a matching card in hand!
-              They were bluffing! <span className="font-bold text-red-400">{offenderName}</span> must draw <span className="font-extrabold text-white">4 cards</span> instead!
-            </>
-          ) : (
-            <>
-              <span className="font-bold text-yellow-300">{offenderName}</span> played fair and had NO matching cards!
-              <span className="font-bold text-red-400"> {challengerName}</span> must draw <span className="font-extrabold text-white">6 cards</span> and forfeit their turn!
-            </>
-          )}
-        </p>
-
-        {revealedHand && revealedHand.length > 0 && (
-          <div className="mb-6 bg-white/5 rounded-2xl p-4 border border-white/10">
-            <div className="text-xs uppercase font-bold text-gray-400 mb-3 tracking-wider">
-              {offenderName}&apos;s Hand at play time:
-            </div>
-            <div className="flex flex-wrap justify-center gap-2 max-h-48 overflow-y-auto p-1">
-              {revealedHand.map((c) => (
+        {result.revealedHand && result.revealedHand.length > 0 && (
+          <div className="mt-4 rounded-2xl border-[2.5px] border-[var(--ink)] bg-white p-3">
+            <div className="label mb-2">{offender.name}'s hand</div>
+            <div className="nice-scroll flex max-h-40 flex-wrap justify-center gap-1.5 overflow-y-auto">
+              {result.revealedHand.map((c) => (
                 <CardView key={c.id} card={c} size="xs" />
               ))}
             </div>
           </div>
         )}
 
-        <button
-          onClick={() => {
-            sfx.click();
-            onClose();
-          }}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-black font-extrabold text-base tracking-wider uppercase shadow-lg shadow-yellow-500/30 transition-transform active:scale-95 cursor-pointer"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          Continue Game
+        <button onClick={close} className="btn btn-yellow mt-5 h-12 w-full text-xl">
+          {won ? 'Ha! Continue' : 'Ugh. Continue'}
         </button>
       </div>
-    </div>
+    </Modal>
   );
 };

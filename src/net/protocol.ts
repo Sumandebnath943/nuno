@@ -29,6 +29,8 @@ export interface ChatMessage {
   text: string;
   time: number;
   isSystem?: boolean;
+  /** Seat of the sender, so the table can show it as a speech bubble. */
+  seat?: number;
 }
 
 // Host -> Client messages

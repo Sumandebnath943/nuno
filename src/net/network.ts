@@ -24,6 +24,8 @@ export interface Session {
   startGame?: () => void;
   updateSeat?: (index: number, kind: 'bot' | 'human') => void;
   updateOptions?: (opts: Partial<RoomOptions>) => void;
+  /** Host only: start a brand-new game with the same seats and settings. */
+  restart?: () => void;
   destroy: () => void;
 }
 
@@ -65,6 +67,12 @@ export class LocalSession implements Session {
     this.host.dispatch({ ...intent, player: 0 } as Action);
   }
 
+  restart() {
+    if (!this.host) return;
+    const seats: SeatConfig[] = this.host.state.players.map((p) => ({ name: p.name, avatar: p.avatar, kind: p.kind }));
+    this.host.replace(createGame(seats, this.options.targetScore));
+  }
+
   sendChat(text: string) {
     const msg: ChatMessage = {
       id: Math.random().toString(36).slice(2),
@@ -72,6 +80,7 @@ export class LocalSession implements Session {
       avatar: this.playerAvatar,
       text,
       time: Date.now(),
+      seat: 0,
     };
     this.events.onChat(msg);
   }
@@ -93,6 +102,7 @@ export class HostSession implements Session {
   private host: GameHost | null = null;
   private unsub?: () => void;
   private lobby: LobbyState;
+  private destroyed = false;
 
   constructor(
     public roomId: string,
@@ -129,6 +139,7 @@ export class HostSession implements Session {
   private async initPeer() {
     try {
       const { Peer } = await import('peerjs');
+      if (this.destroyed) return;
       const peerId = `nuno-${this.roomId.toLowerCase()}-host`;
       this.peer = new Peer(peerId, {
         debug: 1,
@@ -152,6 +163,7 @@ export class HostSession implements Session {
       });
 
       this.peer.on('error', (err) => {
+        if (this.destroyed) return;
         console.warn('PeerJS Host error:', err);
         // If host ID is taken, notify user
         if (err.type === 'unavailable-id') {
@@ -186,6 +198,11 @@ export class HostSession implements Session {
 
   private handleClientMessage(conn: DataConnection, msg: ClientMessage) {
     if (msg.type === 'join') {
+      // Already seated (e.g. a repeated join message): just resend the lobby.
+      if (this.getSeatForConnection(conn) !== -1) {
+        this.broadcastLobby();
+        return;
+      }
       // Find open seat
       let assignedSeat = -1;
       for (let i = 1; i < this.lobby.seats.length; i++) {
@@ -254,8 +271,9 @@ export class HostSession implements Session {
           id: Math.random().toString(36).slice(2),
           sender: p.name,
           avatar: p.avatar,
-          text: msg.text,
+          text: String(msg.text).slice(0, 100),
           time: Date.now(),
+          seat,
         });
       }
     }
@@ -343,6 +361,12 @@ export class HostSession implements Session {
     this.broadcastLobby();
   }
 
+  restart() {
+    if (!this.host) return;
+    const seats: SeatConfig[] = this.lobby.seats.map((s) => ({ name: s.name, avatar: s.avatar, kind: s.kind }));
+    this.host.replace(createGame(seats, this.lobby.options.targetScore));
+  }
+
   updateSeat(index: number, kind: 'bot' | 'human') {
     if (this.lobby.inGame || index <= 0 || index >= this.lobby.seats.length) return;
     if (kind === 'bot') {
@@ -393,10 +417,12 @@ export class HostSession implements Session {
       avatar: this.playerAvatar,
       text,
       time: Date.now(),
+      seat: 0,
     });
   }
 
   destroy() {
+    this.destroyed = true;
     this.unsub?.();
     this.host?.destroy();
     for (const c of this.connections.values()) c.close();
@@ -412,6 +438,7 @@ export class ClientSession implements Session {
   mySeat = -1;
   private peer: Peer | null = null;
   private conn: DataConnection | null = null;
+  private destroyed = false;
 
   constructor(
     public roomId: string,
@@ -425,6 +452,8 @@ export class ClientSession implements Session {
   private async initPeer() {
     try {
       const { Peer } = await import('peerjs');
+      // The player may have left while PeerJS was loading.
+      if (this.destroyed) return;
       this.peer = new Peer({
         debug: 1,
         config: {
@@ -455,17 +484,20 @@ export class ClientSession implements Session {
         });
 
         this.conn.on('close', () => {
+          if (this.destroyed) return;
           this.events.onDisconnected?.();
           this.events.onError('Disconnected from host.');
         });
 
         this.conn.on('error', (err) => {
+          if (this.destroyed) return;
           console.warn('Connection error:', err);
           this.events.onError(err.message || 'Connection lost');
         });
       });
 
       this.peer.on('error', (err) => {
+        if (this.destroyed) return;
         console.warn('Client peer error:', err);
         if (err.type === 'peer-unavailable') {
           this.events.onError(`Room "${this.roomId}" not found. Check the room code or ask the host.`);
@@ -506,6 +538,7 @@ export class ClientSession implements Session {
   }
 
   destroy() {
+    this.destroyed = true;
     this.conn?.close();
     this.peer?.destroy();
   }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import type { Difficulty } from '../game/types';
+import type { Card, Difficulty } from '../game/types';
 import { CardView } from './CardView';
+import { AVATARS, Logo } from './ui';
 import { sfx, isMuted, setMuted } from '../lib/sound';
 
 interface Props {
@@ -14,7 +15,43 @@ interface Props {
   onOpenCardGallery: () => void;
 }
 
-const AVATARS = ['😎', '🦄', '🦊', '🐉', '🤖', '🍕', '🚀', '🐼', '🥷', '👾', '🦁', '👑'];
+const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+const DIFFICULTIES: { id: Difficulty; label: string; icon: string }[] = [
+  { id: 'chill', label: 'Chill', icon: '☕' },
+  { id: 'normal', label: 'Normal', icon: '⚡' },
+  { id: 'savage', label: 'Savage', icon: '🔥' },
+];
+
+const FORMATS: { score: number; label: string; hint: string }[] = [
+  { score: 0, label: '1 Round', hint: 'Quick game' },
+  { score: 250, label: '250 pts', hint: 'Medium' },
+  { score: 500, label: '500 pts', hint: 'Official' },
+];
+
+const HERO_FAN: Pick<Card, 'color' | 'value'>[] = [
+  { color: 'green', value: 'reverse' },
+  { color: 'blue', value: '4' },
+  { color: 'wild', value: 'wild4' },
+  { color: 'red', value: '7' },
+  { color: 'yellow', value: 'draw2' },
+];
+
+const FLOATERS: {
+  card: Pick<Card, 'color' | 'value'> | null;
+  pos: React.CSSProperties;
+  r: number;
+  w: number;
+  delay: number;
+  wide?: boolean;
+}[] = [
+  { card: { color: 'yellow', value: '9' }, pos: { left: '4%', top: '18%' }, r: -18, w: 70, delay: 0 },
+  { card: null, pos: { left: '9%', bottom: '8%' }, r: 14, w: 80, delay: 1.2, wide: true },
+  { card: { color: 'blue', value: 'skip' }, pos: { right: '5%', top: '14%' }, r: 16, w: 72, delay: 0.6 },
+  { card: { color: 'wild', value: 'wild' }, pos: { right: '8%', bottom: '9%' }, r: -12, w: 84, delay: 1.8, wide: true },
+  { card: { color: 'red', value: 'draw2' }, pos: { left: '30%', bottom: '-3%' }, r: 22, w: 64, delay: 2.4, wide: true },
+  { card: { color: 'green', value: '3' }, pos: { right: '32%', top: '-2%' }, r: -24, w: 60, delay: 3, wide: true },
+];
 
 export const HomeMenu: React.FC<Props> = ({
   name,
@@ -26,357 +63,313 @@ export const HomeMenu: React.FC<Props> = ({
   onOpenRules,
   onOpenCardGallery,
 }) => {
-  const [tab, setTab] = useState<'quick' | 'online'>('quick');
-  const [playerCount, setPlayerCount] = useState<number>(4);
-  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
-  const [targetScore, setTargetScore] = useState<number>(500);
-  const [joinCode, setJoinCode] = useState<string>('');
-  const [muted, setMutedState] = useState<boolean>(isMuted());
+  const [tab, setTab] = useState<'bots' | 'friends'>('bots');
+  const [playerCount, setPlayerCount] = useState(() => Number(localStorage.getItem('nuno.players')) || 4);
+  const [difficulty, setDifficulty] = useState<Difficulty>(
+    () => (localStorage.getItem('nuno.difficulty') as Difficulty) || 'normal',
+  );
+  const [targetScore, setTargetScore] = useState(() => {
+    const saved = localStorage.getItem('nuno.target');
+    return saved === null ? 0 : Number(saved);
+  });
+  const [joinCode, setJoinCode] = useState('');
+  const [muted, setMutedState] = useState(isMuted());
+  const [pickingAvatar, setPickingAvatar] = useState(false);
 
-  const handleToggleMute = () => {
+  const remember = (key: string, value: string | number) => localStorage.setItem(key, String(value));
+
+  const toggleMute = () => {
     const next = !muted;
     setMuted(next);
     setMutedState(next);
     if (!next) sfx.click();
   };
 
+  const startBots = () => {
+    sfx.deal();
+    onQuickPlay(playerCount, difficulty, targetScore);
+  };
+
+  const join = () => {
+    const code = joinCode.trim();
+    if (!code) return;
+    sfx.click();
+    onJoinRoom(code);
+  };
+
   return (
-    <div className="relative min-h-screen w-full flex flex-col items-center justify-between p-4 sm:p-6 overflow-x-hidden">
-      {/* Top Utility Bar */}
-      <div className="w-full max-w-4xl flex justify-between items-center z-20">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-wider bg-white/10 px-3 py-1 rounded-full text-yellow-300 border border-white/10">
-            ★ Mattel Official Rules
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            onClick={onOpenCardGallery}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer border border-white/10"
+    <div className="bg-room relative flex h-[100dvh] w-full flex-col overflow-hidden">
+      {/* Decorative floating cards */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+        {FLOATERS.map((f, i) => (
+          <div
+            key={i}
+            className={`absolute animate-floaty ${f.wide ? 'hidden lg:block' : 'hidden sm:block'} land:!hidden`}
+            style={{ ...f.pos, ['--r' as string]: `${f.r}deg`, animationDelay: `${f.delay}s` }}
           >
-            <span>🎴</span>
-            <span>Cards</span>
-          </button>
-
-          <button
-            onClick={onOpenRules}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer border border-white/10"
-          >
-            <span>📖</span>
-            <span>Rules</span>
-          </button>
-
-          <button
-            onClick={handleToggleMute}
-            className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-colors cursor-pointer border border-white/10"
-            title="Toggle Sound Effects"
-          >
-            <span>{muted ? '🔇' : '🔊'}</span>
-            <span>{muted ? 'Muted' : 'Sound'}</span>
-          </button>
-        </div>
+            <CardView card={f.card} faceDown={!f.card} width={f.w} />
+          </div>
+        ))}
       </div>
 
-      {/* Hero Title with playful bouncing Card Graphic */}
-      <div className="flex flex-col items-center text-center my-4 sm:my-8 z-10">
-        <div className="relative mb-2 flex items-center justify-center">
-          {/* Decorative background cards */}
-          <div className="absolute -left-12 -top-4 -rotate-12 opacity-80 pointer-events-none hidden sm:block">
-            <CardView card={{ id: 'c1', color: 'red', value: '7' }} size="sm" />
-          </div>
-          <div className="absolute -right-12 -top-4 rotate-12 opacity-80 pointer-events-none hidden sm:block">
-            <CardView card={{ id: 'c2', color: 'wild', value: 'wild4' }} size="sm" />
-          </div>
+      {/* Top bar (moves into the hero column on short landscape screens) */}
+      <header className="relative z-10 flex items-center justify-end gap-2 p-3 sm:p-4 land:hidden">
+        <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={onOpenRules} onOpenCardGallery={onOpenCardGallery} />
+      </header>
 
-          <h1
-            className="text-6xl sm:text-8xl font-black tracking-wider text-yellow-400 drop-shadow-2xl animate-bounce-slow"
-            style={{
-              fontFamily: 'var(--font-display)',
-              textShadow:
-                '0 8px 0 #b38600, 0 14px 25px rgba(0,0,0,0.8), -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000',
-              letterSpacing: '2px',
-            }}
-          >
-            NUNO
-          </h1>
-        </div>
-
-        <p className="text-gray-200 text-sm sm:text-base font-semibold max-w-md drop-shadow">
-          The fast, loud, wildly fun card game. Match by color, number, or symbol. Shout NUNO before anyone catches you!
-        </p>
-      </div>
-
-      {/* Main Interactive Container */}
-      <div className="w-full max-w-xl bg-black/40 border border-white/15 backdrop-blur-md rounded-3xl p-6 shadow-2xl z-20 mb-8">
-        {/* Profile Customization */}
-        <div className="mb-6 bg-white/5 border border-white/10 rounded-2xl p-4">
-          <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">
-            Your Player Profile:
-          </label>
-          <div className="flex items-center gap-3">
-            <div className="relative group">
-              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl border border-white/20 shadow-inner">
-                {avatar}
-              </div>
-            </div>
-
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => onUpdateProfile(e.target.value.slice(0, 15), avatar)}
-              placeholder="Enter your name"
-              className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-sm text-white font-bold placeholder-gray-400 outline-none focus:ring-2 focus:ring-yellow-400"
-            />
-          </div>
-
-          {/* Quick Avatar Picker */}
-          <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-white/10">
-            {AVATARS.map((av) => (
-              <button
-                key={av}
-                onClick={() => {
-                  sfx.click();
-                  onUpdateProfile(name, av);
-                }}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-base transition-transform cursor-pointer ${
-                  avatar === av ? 'bg-yellow-400 text-black scale-110 shadow-md' : 'hover:bg-white/10'
-                }`}
-              >
-                {av}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tab switcher: Quick Play vs Online Friends */}
-        <div className="grid grid-cols-2 gap-2 p-1 bg-white/10 rounded-2xl mb-6">
-          <button
-            onClick={() => {
-              sfx.click();
-              setTab('quick');
-            }}
-            className={`py-3 rounded-xl font-extrabold text-sm uppercase tracking-wider transition-all cursor-pointer ${
-              tab === 'quick'
-                ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-black shadow-md'
-                : 'text-gray-300 hover:text-white'
-            }`}
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
-            🤖 Play with Bots
-          </button>
-
-          <button
-            onClick={() => {
-              sfx.click();
-              setTab('online');
-            }}
-            className={`py-3 rounded-xl font-extrabold text-sm uppercase tracking-wider transition-all cursor-pointer ${
-              tab === 'online'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
-                : 'text-gray-300 hover:text-white'
-            }`}
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
-            🌐 Play Online
-          </button>
-        </div>
-
-        {/* Tab 1: Quick Play (Solo with Bots) */}
-        {tab === 'quick' && (
-          <div className="space-y-5 animate-fadeIn">
-            {/* Player Count Selector */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs font-bold text-gray-300 uppercase tracking-wide">
-                  Number of Players (Minimum 2):
-                </span>
-                <span className="text-base font-extrabold text-yellow-300">
-                  {playerCount} Players
-                </span>
-              </div>
-              <input
-                type="range"
-                min="2"
-                max="10"
-                value={playerCount}
-                onChange={(e) => setPlayerCount(Number(e.target.value))}
-                className="w-full accent-yellow-400 cursor-pointer h-2 bg-white/20 rounded-lg"
+      <main className="nice-scroll relative z-10 flex min-h-0 flex-1 overflow-y-auto">
+        <div className="m-auto flex w-full flex-col items-center gap-3 px-4 pb-4 sm:gap-5 lg:flex-row lg:justify-center lg:gap-16 lg:pb-10 land:flex-row land:justify-center land:gap-8 land:py-3">
+          {/* Hero */}
+          <section className="flex flex-col items-center">
+            <Logo className="w-[min(76vw,300px)] drop-shadow-[0_10px_0_rgba(0,0,0,0.25)] sm:w-[360px] lg:w-[470px] land:!w-[280px]" />
+            <p className="font-display mt-1 text-center text-base text-white/90 [@media(max-height:700px)]:hidden sm:text-xl lg:mt-3 land:!block">
+              Match it. Slam it. <span className="text-[#ffd21f]">Shout NUNO!</span>
+            </p>
+            <div className="mt-4 hidden gap-2 land:flex">
+              <MenuButtons
+                muted={muted}
+                onToggleMute={toggleMute}
+                onOpenRules={onOpenRules}
+                onOpenCardGallery={onOpenCardGallery}
               />
-              <div className="flex justify-between text-[11px] text-gray-400 mt-1">
-                <span>2 (Duel)</span>
-                <span>4 (Classic)</span>
-                <span>6</span>
-                <span>8</span>
-                <span>10 (Party)</span>
+            </div>
+            <div className="mt-6 hidden h-[190px] items-end justify-center lg:flex [@media(max-height:760px)]:!hidden">
+              {HERO_FAN.map((c, i) => {
+                const off = i - 2;
+                return (
+                  <div
+                    key={i}
+                    className="-mx-4 origin-bottom transition-transform duration-200 hover:-translate-y-5"
+                    style={{ transform: `rotate(${off * 11}deg) translateY(${Math.abs(off) * 10}px)` }}
+                  >
+                    <CardView card={c} width={104} />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Setup panel */}
+          <section className="panel relative w-full max-w-[440px] shrink-0 p-4 sm:p-5 land:max-w-[400px] land:p-3.5">
+            {/* Profile */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => (sfx.click(), setPickingAvatar((v) => !v))}
+                className="chip flex h-12 w-12 shrink-0 items-center justify-center !rounded-2xl text-2xl land:h-10 land:w-10"
+                aria-label="Choose avatar"
+                title="Choose avatar"
+              >
+                {avatar}
+              </button>
+              <div className="min-w-0 flex-1">
+                <label htmlFor="nuno-name" className="label block land:sr-only">
+                  Your name
+                </label>
+                <input
+                  id="nuno-name"
+                  value={name}
+                  onChange={(e) => onUpdateProfile(e.target.value.slice(0, 14), avatar)}
+                  placeholder="Enter your name"
+                  className="field mt-0.5 h-10 w-full px-3 text-base land:h-9"
+                />
               </div>
             </div>
 
-            {/* Difficulty Selector */}
-            <div className="grid grid-cols-3 gap-2">
-              {(['chill', 'normal', 'savage'] as Difficulty[]).map((d) => (
+            {pickingAvatar && (
+              <div className="panel absolute left-3 right-3 top-[72px] z-20 grid grid-cols-8 gap-1.5 !rounded-2xl p-2.5 animate-popIn">
+                {AVATARS.map((av) => (
+                  <button
+                    key={av}
+                    onClick={() => {
+                      sfx.pop();
+                      onUpdateProfile(name, av);
+                      setPickingAvatar(false);
+                    }}
+                    className={`flex aspect-square items-center justify-center rounded-xl text-xl transition-transform hover:scale-110 ${
+                      av === avatar ? 'bg-[#ffe066] ring-2 ring-[var(--ink)]' : 'hover:bg-black/5'
+                    }`}
+                  >
+                    {av}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Mode tabs */}
+            <div className="mt-4 grid grid-cols-2 gap-2 land:mt-2 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[#efe6d2] p-1">
+              {(
+                [
+                  ['bots', '🤖  vs Bots'],
+                  ['friends', '🌐  With Friends'],
+                ] as const
+              ).map(([id, label]) => (
                 <button
-                  key={d}
-                  onClick={() => {
-                    sfx.click();
-                    setDifficulty(d);
-                  }}
-                  className={`py-2.5 px-2 rounded-xl text-xs font-bold capitalize transition-all cursor-pointer border ${
-                    difficulty === d
-                      ? 'bg-yellow-400/20 border-yellow-400 text-yellow-300 shadow-sm'
-                      : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                  key={id}
+                  onClick={() => (sfx.click(), setTab(id))}
+                  className={`font-display h-10 rounded-xl text-base transition-colors land:h-8 ${
+                    tab === id
+                      ? 'border-2 border-[var(--ink)] bg-white shadow-[0_2px_0_var(--ink)]'
+                      : 'text-[#6b6385] hover:text-[var(--ink)]'
                   }`}
                 >
-                  <div>{d === 'chill' ? '☕ Chill' : d === 'normal' ? '⚡ Normal' : '🔥 Savage'}</div>
-                  <div className="text-[10px] opacity-70 font-normal">
-                    {d === 'chill' ? 'Casual' : d === 'normal' ? 'Balanced' : 'Ruthless'}
-                  </div>
+                  {label}
                 </button>
               ))}
             </div>
 
-            {/* Target Score */}
-            <div>
-              <label className="block text-xs font-bold text-gray-300 uppercase tracking-wide mb-1.5">
-                Game Format:
-              </label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  onClick={() => setTargetScore(0)}
-                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                    targetScore === 0
-                      ? 'bg-white/15 border-yellow-400 text-yellow-300 font-bold'
-                      : 'bg-white/5 border-white/10 text-gray-400'
-                  }`}
-                >
-                  <div className="font-bold">⚡ Quick Match</div>
-                  <div className="text-[10px] text-gray-400">Single round winner</div>
-                </button>
-
-                <button
-                  onClick={() => setTargetScore(500)}
-                  className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                    targetScore === 500
-                      ? 'bg-white/15 border-yellow-400 text-yellow-300 font-bold'
-                      : 'bg-white/5 border-white/10 text-gray-400'
-                  }`}
-                >
-                  <div className="font-bold">🏆 500 Points</div>
-                  <div className="text-[10px] text-gray-400">Official tournament mode</div>
-                </button>
-              </div>
-            </div>
-
-            {/* Play Button */}
-            <button
-              onClick={() => {
-                sfx.deal();
-                onQuickPlay(playerCount, difficulty, targetScore);
-              }}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-yellow-500 via-amber-500 to-yellow-600 hover:from-yellow-400 hover:to-amber-400 text-black font-black text-xl tracking-wider uppercase shadow-xl shadow-yellow-500/30 transition-transform active:scale-95 cursor-pointer mt-4"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              🚀 PLAY NOW!
-            </button>
-          </div>
-        )}
-
-        {/* Tab 2: Online Multiplayer */}
-        {tab === 'online' && (
-          <div className="space-y-6 animate-fadeIn">
-            {/* Create Room Section */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-              <h4
-                className="font-extrabold text-base text-yellow-300 mb-2 flex items-center gap-1.5"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                <span>👑</span> Host a New Room
-              </h4>
-              <p className="text-xs text-gray-300 mb-4">
-                Create a multiplayer room, invite friends via link or code, and fill empty slots with bots!
-              </p>
-
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-xs text-gray-300">Slots:</span>
-                <select
+            {tab === 'bots' ? (
+              <div className="mt-4 space-y-3.5 animate-fadeIn land:mt-2 land:space-y-1.5">
+                <PlayerCountPicker
                   value={playerCount}
-                  onChange={(e) => setPlayerCount(Number(e.target.value))}
-                  className="bg-white/10 text-white text-xs rounded-xl px-3 py-2 border border-white/20 outline-none cursor-pointer"
-                >
-                  {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                    <option key={n} value={n} className="bg-gray-900">
-                      {n} Players
-                    </option>
-                  ))}
-                </select>
+                  onChange={(n) => {
+                    setPlayerCount(n);
+                    remember('nuno.players', n);
+                  }}
+                />
 
-                <select
-                  value={difficulty}
-                  onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-                  className="bg-white/10 text-white text-xs rounded-xl px-3 py-2 border border-white/20 outline-none cursor-pointer"
-                >
-                  <option value="chill" className="bg-gray-900">Chill Bots</option>
-                  <option value="normal" className="bg-gray-900">Normal Bots</option>
-                  <option value="savage" className="bg-gray-900">Savage Bots</option>
-                </select>
+                <div>
+                  <div className="label mb-1.5 land:mb-1">Bot skill</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DIFFICULTIES.map((d) => (
+                      <button
+                        key={d.id}
+                        onClick={() => {
+                          sfx.click();
+                          setDifficulty(d.id);
+                          remember('nuno.difficulty', d.id);
+                        }}
+                        className={`chip h-10 text-[15px] land:h-9 ${difficulty === d.id ? 'is-on' : ''}`}
+                      >
+                        {d.icon} {d.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="label mb-1.5 land:mb-1">Game length</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {FORMATS.map((f) => (
+                      <button
+                        key={f.score}
+                        onClick={() => {
+                          sfx.click();
+                          setTargetScore(f.score);
+                          remember('nuno.target', f.score);
+                        }}
+                        className={`chip flex h-12 flex-col items-center justify-center leading-none land:h-9 ${targetScore === f.score ? 'is-on' : ''}`}
+                      >
+                        <span className="text-[15px]">{f.label}</span>
+                        <span className="mt-1 font-body text-[11px] font-semibold opacity-60 land:hidden">{f.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button onClick={startBots} className="btn btn-yellow mt-1 h-14 w-full text-2xl land:h-11 land:text-xl">
+                  PLAY!
+                </button>
               </div>
-
-              <button
-                onClick={() => {
-                  sfx.deal();
-                  onCreateRoom(playerCount, difficulty, targetScore);
-                }}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-sm uppercase tracking-wider shadow-lg transition-transform active:scale-95 cursor-pointer"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                + Create Room & Invite
-              </button>
-            </div>
-
-            {/* Join Room Section */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-              <h4
-                className="font-extrabold text-base text-yellow-300 mb-2 flex items-center gap-1.5"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                <span>🔗</span> Join an Existing Room
-              </h4>
-              <p className="text-xs text-gray-300 mb-3">
-                Enter the room code shared by your friend:
-              </p>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="e.g. NUNO-7X9K"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  maxLength={12}
-                  className="flex-1 bg-white/10 border border-white/20 rounded-xl px-3.5 py-2.5 text-sm text-white font-mono font-bold uppercase tracking-wider placeholder-gray-500 outline-none focus:ring-2 focus:ring-yellow-400"
+            ) : (
+              <div className="mt-4 space-y-3.5 animate-fadeIn land:mt-2 land:space-y-1.5">
+                <PlayerCountPicker
+                  value={playerCount}
+                  onChange={(n) => {
+                    setPlayerCount(n);
+                    remember('nuno.players', n);
+                  }}
+                  hint="Empty seats are filled with bots until friends join."
                 />
                 <button
                   onClick={() => {
-                    if (joinCode.trim()) {
-                      sfx.click();
-                      onJoinRoom(joinCode.trim());
-                    }
+                    sfx.deal();
+                    onCreateRoom(playerCount, difficulty, targetScore);
                   }}
-                  disabled={!joinCode.trim()}
-                  className="py-2.5 px-6 rounded-xl bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-black font-extrabold text-xs uppercase tracking-wider shadow-md transition-transform active:scale-95 cursor-pointer"
-                  style={{ fontFamily: 'var(--font-display)' }}
+                  className="btn btn-purple h-14 w-full text-xl land:h-11"
                 >
-                  Join
+                  Create a room
                 </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Footer */}
-      <footer className="text-center text-xs text-gray-400 z-10 pb-2">
-        <p>NUNO — Built with official Uno rules & WebRTC P2P multiplayer</p>
-      </footer>
+                <div className="flex items-center gap-3 text-[#9a93ad]">
+                  <div className="h-[2px] flex-1 bg-[#e3d9c3]" />
+                  <span className="label">or join one</span>
+                  <div className="h-[2px] flex-1 bg-[#e3d9c3]" />
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    onKeyDown={(e) => e.key === 'Enter' && join()}
+                    placeholder="ROOM CODE"
+                    maxLength={8}
+                    aria-label="Room code"
+                    className="field h-14 min-w-0 flex-1 px-4 text-center font-display text-2xl tracking-[0.2em] land:h-11"
+                  />
+                  <button onClick={join} disabled={!joinCode.trim()} className="btn btn-blue h-14 px-6 text-xl land:h-11">
+                    Join
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      </main>
     </div>
   );
 };
+
+function MenuButtons({
+  muted,
+  onToggleMute,
+  onOpenRules,
+  onOpenCardGallery,
+}: {
+  muted: boolean;
+  onToggleMute: () => void;
+  onOpenRules: () => void;
+  onOpenCardGallery: () => void;
+}) {
+  return (
+    <>
+      <button className="icon-btn" onClick={() => (sfx.click(), onOpenCardGallery())}>
+        <span aria-hidden>🎴</span>
+        <span className="hidden sm:inline">Cards</span>
+      </button>
+      <button className="icon-btn" onClick={() => (sfx.click(), onOpenRules())}>
+        <span aria-hidden>📖</span>
+        <span className="hidden sm:inline">How to play</span>
+      </button>
+      <button className="icon-btn" onClick={onToggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
+        {muted ? '🔇' : '🔊'}
+      </button>
+    </>
+  );
+}
+
+function PlayerCountPicker({ value, onChange, hint }: { value: number; onChange: (n: number) => void; hint?: string }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between land:mb-1">
+        <span className="label">Players</span>
+        <span className="font-display text-[15px] text-[var(--ink)]">
+          {value === 2 ? 'Head to head' : `You + ${value - 1} others`}
+        </span>
+      </div>
+      <div className="grid grid-cols-9 gap-1">
+        {PLAYER_COUNTS.map((n) => (
+          <button
+            key={n}
+            onClick={() => (sfx.click(), onChange(n))}
+            className={`chip h-10 text-lg land:h-9 ${value === n ? 'is-on' : ''}`}
+            aria-pressed={value === n}
+            aria-label={`${n} players`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      {hint && <p className="mt-1.5 text-xs font-medium text-[#6b6385]">{hint}</p>}
+    </div>
+  );
+}

@@ -7,6 +7,8 @@ import { LobbyView } from './components/LobbyView';
 import { GameBoard } from './components/GameBoard';
 import { RulesModal } from './components/RulesModal';
 import { CardGalleryModal } from './components/CardGalleryModal';
+import { CardDefs } from './components/CardView';
+import { Logo } from './components/ui';
 
 function generateRoomId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -160,21 +162,20 @@ export const App: React.FC = () => {
   };
 
   const handleNewGame = () => {
-    if (session) {
-      session.sendAction({ type: 'nextRound' });
-    }
+    session?.restart?.();
   };
 
   return (
     <div className="w-full min-h-screen">
+      <CardDefs />
       {/* Toast Error Alert */}
       {errorMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-red-600 text-white text-xs sm:text-sm font-bold px-4 py-3 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-3 animate-fadeIn">
+        <div
+          role="alert"
+          className="font-display fixed left-1/2 top-4 z-[90] flex max-w-[92vw] -translate-x-1/2 items-center gap-3 rounded-2xl border-[3px] border-[var(--ink)] bg-[#ffe1e1] px-4 py-2.5 text-[var(--ink)] shadow-[0_4px_0_var(--ink)] animate-popIn"
+        >
           <span>⚠️ {errorMessage}</span>
-          <button
-            onClick={() => setErrorMessage(null)}
-            className="text-white hover:text-gray-200 cursor-pointer font-black"
-          >
+          <button onClick={() => setErrorMessage(null)} className="icon-btn !h-8 !min-w-8 !px-0" aria-label="Dismiss">
             ✕
           </button>
         </div>
@@ -192,6 +193,19 @@ export const App: React.FC = () => {
           onOpenRules={() => setRulesOpen(true)}
           onOpenCardGallery={() => setGalleryOpen(true)}
         />
+      )}
+
+      {screen === 'lobby' && !lobby && (
+        <div className="bg-room flex h-[100dvh] flex-col items-center justify-center gap-6 p-6 text-center">
+          <Logo className="w-64" />
+          <div className="panel flex items-center gap-3 px-6 py-4">
+            <span className="text-3xl animate-wiggle">🎲</span>
+            <span className="font-display text-xl">Finding the room…</span>
+          </div>
+          <button onClick={handleLeave} className="icon-btn">
+            ← Back to menu
+          </button>
+        </div>
       )}
 
       {screen === 'lobby' && lobby && (
@@ -213,10 +227,13 @@ export const App: React.FC = () => {
           view={view}
           isHost={session?.isHost ?? false}
           roomId={lobby?.roomId}
+          chatMessages={chatMessages}
           onAction={handleAction}
+          onSendChat={(text) => session?.sendChat(text)}
           onLeave={handleLeave}
           onNextRound={handleNextRound}
           onNewGame={handleNewGame}
+          onOpenRules={() => setRulesOpen(true)}
         />
       )}
 
