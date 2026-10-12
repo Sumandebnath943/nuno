@@ -46,7 +46,7 @@ const FLOATERS: {
   { card: { color: 'blue', value: 'skip' }, pos: { right: '5%', top: '14%' }, r: 16, w: 72, delay: 0.6 },
   { card: { color: 'wild', value: 'wild' }, pos: { right: '8%', bottom: '9%' }, r: -12, w: 84, delay: 1.8, wide: true },
   { card: { color: 'red', value: 'draw2' }, pos: { left: '30%', bottom: '-3%' }, r: 22, w: 64, delay: 2.4, wide: true },
-  { card: { color: 'green', value: '3' }, pos: { right: '32%', top: '-2%' }, r: -24, w: 60, delay: 3, wide: true },
+  { card: { color: 'green', value: '3' }, pos: { left: '24%', top: '3%' }, r: -24, w: 60, delay: 3, wide: true },
 ];
 
 const read = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
@@ -114,7 +114,7 @@ export const HomeMenu: React.FC<Props> = ({
       </div>
 
       {/* Top bar (moves into the hero column on short landscape screens) */}
-      <header className="safe-top relative z-10 flex items-center justify-end gap-2 p-3 short:py-2 sm:p-4 land:hidden">
+      <header className="safe-top relative z-10 flex items-center justify-end gap-2 p-3 phone:py-2 sm:p-4 lg:absolute lg:inset-x-0 lg:top-0 land:hidden">
         <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={(focus) => onOpenRules(mode, focus)} />
       </header>
 
@@ -122,8 +122,8 @@ export const HomeMenu: React.FC<Props> = ({
         <div className="m-auto flex w-full flex-col items-center gap-3 px-4 pb-4 short:gap-2 sm:gap-5 lg:flex-row lg:justify-center lg:gap-16 lg:pb-10 land:flex-row land:justify-center land:gap-8 land:py-3">
           {/* Hero */}
           <section className="flex flex-col items-center">
-            <Logo className="w-[min(76vw,300px)] drop-shadow-[0_10px_0_rgba(0,0,0,0.25)] short:w-[min(62vw,230px)] sm:w-[360px] lg:w-[470px] land:!w-[260px]" />
-            <p className="font-display mt-1 text-center text-base text-white/90 short:hidden sm:text-xl lg:mt-3 land:!hidden">
+            <Logo className="w-[min(76vw,300px)] drop-shadow-[0_10px_0_rgba(0,0,0,0.25)] phone:w-[min(62vw,230px)] sm:w-[360px] lg:w-[470px] land:!w-[260px]" />
+            <p className="font-display mt-1 text-center text-base text-white/90 phone:hidden sm:text-xl lg:mt-3 land:!hidden">
               Match it. Slam it. <span className="text-[#ffd21f]">Shout NUNO!</span>
             </p>
             {/* On short landscape screens the mode and menu buttons live here instead. */}
@@ -135,15 +135,17 @@ export const HomeMenu: React.FC<Props> = ({
               {heroCards.map((c, i) => {
                 const off = i - (heroCards.length - 1) / 2;
                 return (
+                  // Three layers so the fan angle, the hover lift and the pop-in don't fight over `transform`.
                   <div
                     key={`${mode}-${i}`}
-                    className="-mx-4 origin-bottom animate-popIn transition-transform duration-200 hover:-translate-y-5"
-                    style={{
-                      transform: `rotate(${off * 11}deg) translateY(${Math.abs(off) * 10}px)`,
-                      animationDelay: `${i * 0.05}s`,
-                    }}
+                    className="-mx-4 origin-bottom"
+                    style={{ transform: `rotate(${off * 11}deg) translateY(${Math.abs(off) * 10}px)` }}
                   >
-                    <CardView card={c.card} side={c.side} width={104} />
+                    <div className="transition-transform duration-200 hover:-translate-y-5">
+                      <div className="animate-popIn" style={{ animationDelay: `${i * 0.05}s` }}>
+                        <CardView card={c.card} side={c.side} width={104} />
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -242,7 +244,7 @@ export const HomeMenu: React.FC<Props> = ({
                           setDifficulty(d.id);
                           remember('nuno.difficulty', d.id);
                         }}
-                        className={`chip h-10 text-[15px] short:h-9 ${difficulty === d.id ? 'is-on' : ''}`}
+                        className={`chip h-10 text-[15px] short:h-9 land:h-8 ${difficulty === d.id ? 'is-on' : ''}`}
                       >
                         {d.icon} {d.label}
                       </button>
@@ -264,7 +266,7 @@ export const HomeMenu: React.FC<Props> = ({
                     sfx.deal();
                     onQuickPlay(playerCount, difficulty, target, mode);
                   }}
-                  className="btn btn-yellow mt-1 h-14 w-full text-2xl short:h-12 land:h-11 land:text-xl"
+                  className="btn btn-yellow mt-1 h-14 w-full text-2xl short:h-12 land:h-10 land:text-xl"
                 >
                   PLAY!
                 </button>
@@ -376,7 +378,7 @@ function FormatPicker({ format, official, onChange }: { format: Format; official
           <button
             key={f.id}
             onClick={() => (sfx.click(), onChange(f.id))}
-            className={`chip flex h-12 flex-col items-center justify-center leading-none short:h-9 ${format === f.id ? 'is-on' : ''}`}
+            className={`chip flex h-12 flex-col items-center justify-center leading-none short:h-9 land:h-8 ${format === f.id ? 'is-on' : ''}`}
           >
             <span className="text-[15px]">{f.label}</span>
             <span className="mt-1 font-body text-[11px] font-semibold opacity-60 short:hidden">{f.hint}</span>
@@ -401,7 +403,7 @@ function PlayerCountPicker({ value, onChange, hint }: { value: number; onChange:
           <button
             key={n}
             onClick={() => (sfx.click(), onChange(n))}
-            className={`chip h-10 text-lg short:h-9 ${value === n ? 'is-on' : ''}`}
+            className={`chip h-10 text-lg short:h-9 land:h-8 ${value === n ? 'is-on' : ''}`}
             aria-pressed={value === n}
             aria-label={`${n} players`}
           >
