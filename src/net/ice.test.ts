@@ -91,3 +91,50 @@ describe('the game’s ICE servers', () => {
     expect(await getIceServers()).toHaveLength(1);
   });
 });
+
+describe('the relay check in Settings', () => {
+  /** A stand-in for the browser's RTCPeerConnection that reports the candidates we hand it. */
+  function fakePeerConnection(candidates: { type: string; candidate: string }[], configs: RTCConfiguration[]) {
+    return class {
+      onicecandidate: ((e: { candidate: unknown }) => void) | null = null;
+      constructor(config: RTCConfiguration) {
+        configs.push(config);
+      }
+      createDataChannel() {}
+      async createOffer() {
+        return {};
+      }
+      async setLocalDescription() {
+        for (const c of candidates) this.onicecandidate?.({ candidate: c });
+        this.onicecandidate?.({ candidate: null });
+      }
+      close() {}
+    };
+  }
+
+  it('says off when no relay is set up', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const { checkRelay } = await import('./ice');
+    expect(await checkRelay()).toBe('off');
+  });
+
+  it('says working when the relay hands out an address', async () => {
+    vi.stubEnv('VITE_TURN_URLS', 'turn:relay.example:3478');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const configs: RTCConfiguration[] = [];
+    vi.stubGlobal('RTCPeerConnection', fakePeerConnection([{ type: 'relay', candidate: 'candidate:1 1 udp 1 1.2.3.4 5000 typ relay raddr 0.0.0.0 rport 0' }], configs));
+    const { checkRelay } = await import('./ice');
+    expect(await checkRelay()).toBe('working');
+    // Only the relay is asked (not STUN, not a direct link).
+    expect(configs[0].iceTransportPolicy).toBe('relay');
+    expect(JSON.stringify(configs[0].iceServers)).not.toContain('stun:');
+  });
+
+  it('says not answering when the relay gives nothing back (wrong password, blocked port)', async () => {
+    vi.stubEnv('VITE_TURN_URLS', 'turn:relay.example:3478');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    vi.stubGlobal('RTCPeerConnection', fakePeerConnection([], []));
+    const { checkRelay } = await import('./ice');
+    expect(await checkRelay()).toBe('unreachable');
+  });
+});

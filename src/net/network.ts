@@ -62,12 +62,13 @@ export interface SessionEvents {
   /**
    * Connection trouble that sorts itself out: `reconnecting` (the link dropped,
    * usually because the game was in the background), `waiting` (the host can't
-   * be reached yet), `reopening` (a reloaded page getting its room back). Null when fine.
+   * be reached yet), `reopening` (a reloaded page getting its room back), `blocked`
+   * (the host is there but the networks won't link up). Null when fine.
    */
   onStatus?: (status: ConnStatus | null) => void;
 }
 
-export type ConnStatus = 'reconnecting' | 'waiting' | 'reopening';
+export type ConnStatus = 'reconnecting' | 'waiting' | 'reopening' | 'blocked';
 
 export interface Session {
   isHost: boolean;
@@ -768,7 +769,7 @@ export class ClientSession implements Session {
             const c = this.conn;
             this.conn = null;
             c.close();
-            this.retry();
+            this.retry('away');
           }
           return; // otherwise a voice link to someone who just left
         }
@@ -806,10 +807,12 @@ export class ClientSession implements Session {
       if (this.conn === conn) this.handleServerMessage(raw as ServerMessage);
     });
 
+    // The host is on the server but the link itself didn't come up: something
+    // between the two networks is blocking it (not the host being away).
     const lost = () => {
       if (this.conn !== conn || this.destroyed) return;
       this.conn = null;
-      this.retry();
+      this.retry(opened ? 'dropped' : 'blocked');
     };
     conn.on('close', lost);
     conn.on('error', (err) => {
@@ -820,13 +823,17 @@ export class ClientSession implements Session {
       if (this.conn === conn && !opened) {
         this.conn = null;
         conn.close();
-        this.retry();
+        this.retry('blocked');
       }
     }, CONNECT_TIMEOUT_MS);
   }
 
-  /** Lost the host, or haven't reached them yet: keep trying for a while before giving up. */
-  private retry() {
+  /**
+   * Lost the host, or haven't reached them yet: keep trying for a while before
+   * giving up. `away`: the host isn't on the server (their game is probably in
+   * the background). `blocked`: they are, but the networks won't let us link up.
+   */
+  private retry(why: 'away' | 'blocked' | 'dropped') {
     clearTimeout(this.retryTimer);
     if (this.destroyed) return;
     const now = Date.now();
@@ -834,10 +841,16 @@ export class ClientSession implements Session {
     if (now - this.troubleSince > GIVE_UP_MS) {
       this.events.onStatus?.(null);
       this.events.onDisconnected?.();
-      this.events.onError(this.joined ? 'Lost the connection to the host.' : `Room "${this.roomId}" not found. Check the room code or ask the host.`);
+      this.events.onError(
+        why === 'blocked'
+          ? 'Couldn’t connect to the host’s phone: a network between you is blocking it. Try switching one of you to mobile data or another Wi-Fi.'
+          : this.joined
+            ? 'Lost the connection to the host.'
+            : `Room "${this.roomId}" not found. Check the room code or ask the host.`,
+      );
       return;
     }
-    this.events.onStatus?.(this.joined ? 'reconnecting' : 'waiting');
+    this.events.onStatus?.(why === 'blocked' ? 'blocked' : why === 'away' || !this.joined ? 'waiting' : 'reconnecting');
     // Quick at first, then every few seconds.
     const delay = Math.min(5000, 800 + (now - this.troubleSince) / 15);
     this.retryTimer = setTimeout(() => this.connectToHost(), delay);

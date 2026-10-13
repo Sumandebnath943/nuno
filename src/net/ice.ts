@@ -64,3 +64,54 @@ export function getIceServers(): Promise<RTCIceServer[]> {
 export function prefetchIceServers() {
   void getIceServers();
 }
+
+export type RelayStatus = 'working' | 'unreachable' | 'off';
+
+const urlsOf = (s: RTCIceServer) => (Array.isArray(s.urls) ? s.urls : [s.urls]);
+let relayCheck: Promise<RelayStatus> | null = null;
+
+/**
+ * Is a relay set up, and does it answer from this network? Asks it for a
+ * relayed address (what a call would use when a direct link fails). Checked
+ * once per visit; `fresh` checks again.
+ */
+export function checkRelay(fresh = false, timeoutMs = 7000): Promise<RelayStatus> {
+  if (relayCheck && !fresh) return relayCheck;
+  relayCheck = (async (): Promise<RelayStatus> => {
+    const relays = (await getIceServers()).filter((s) => urlsOf(s).some((u) => /^turns?:/.test(u)));
+    if (!relays.length) return 'off';
+    if (typeof RTCPeerConnection === 'undefined') return 'unreachable';
+    let pc: RTCPeerConnection;
+    try {
+      pc = new RTCPeerConnection({ iceServers: relays, iceTransportPolicy: 'relay' });
+    } catch {
+      return 'unreachable';
+    }
+    return new Promise<RelayStatus>((resolve) => {
+      let done = false;
+      const finish = (status: RelayStatus) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        try {
+          pc.close();
+        } catch {
+          // already closed
+        }
+        resolve(status);
+      };
+      const timer = setTimeout(() => finish('unreachable'), timeoutMs);
+      pc.onicecandidate = (e) => {
+        // A relayed address means the relay let us in; the end of the list without one means it didn't.
+        if (e.candidate) {
+          if (e.candidate.type === 'relay' || / typ relay /.test(e.candidate.candidate)) finish('working');
+        } else finish('unreachable');
+      };
+      pc.createDataChannel('relay-check');
+      pc.createOffer()
+        .then((offer) => pc.setLocalDescription(offer))
+        .catch(() => finish('unreachable'));
+    });
+  })();
+  return relayCheck;
+}

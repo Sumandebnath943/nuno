@@ -244,10 +244,17 @@ export const App: React.FC = () => {
             <div className="panel flex max-w-[min(92vw,380px)] items-center gap-3 px-5 py-4 text-left">
               <span className="text-3xl animate-wiggle">🎲</span>
               <span>
-                <span className="font-display block text-xl">{connStatus === 'waiting' ? 'Waiting for the host…' : 'Finding the room…'}</span>
+                <span className="font-display block text-xl">
+                  {connStatus === 'waiting' ? 'Waiting for the host…' : connStatus === 'blocked' ? 'Can’t reach the host yet…' : 'Finding the room…'}
+                </span>
                 {connStatus === 'waiting' && (
                   <span className="font-body block text-sm font-semibold text-[var(--muted)]">
                     Their game may be in the background. You’ll get in as soon as they’re back.
+                  </span>
+                )}
+                {connStatus === 'blocked' && (
+                  <span className="font-body block text-sm font-semibold text-[var(--muted)]">
+                    The room is there, but the networks won’t link up. Still trying. If it keeps failing, switch one of you to mobile data or another Wi-Fi.
                   </span>
                 )}
               </span>
@@ -315,6 +322,7 @@ const STATUS_TEXT: Record<ConnStatus, [string, string]> = {
   reconnecting: ['📡', 'Reconnecting…'],
   waiting: ['⏳', 'Waiting for the host…'],
   reopening: ['📡', 'Reopening your room…'],
+  blocked: ['🧱', 'Can’t reach the host’s phone yet — retrying…'],
 };
 
 /** A small note at the top while a dropped connection comes back. */

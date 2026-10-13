@@ -6,6 +6,7 @@ import { setPreviewTheme, updateSettings, useSettings, type FxQuality, type Pace
 import { sfx } from '../lib/sound';
 import { artFor, preload } from '../themes/characters';
 import type { Color } from '../game/types';
+import { checkRelay, type RelayStatus } from '../net/ice';
 
 export type SettingsTab = 'themes' | 'sound' | 'game';
 
@@ -446,9 +447,61 @@ function GameSettings({ onOpenRules }: { onOpenRules?: () => void }) {
         </div>
       </section>
 
+      <section>
+        <div className="label mb-2">Online play</div>
+        <RelayStatusCard />
+      </section>
+
       {onOpenRules && (
         <button onClick={onOpenRules} className="btn btn-white h-12 w-full text-lg">
           📖 How to play
+        </button>
+      )}
+    </div>
+  );
+}
+
+const RELAY_TEXT: Record<RelayStatus | 'checking', { badge: string; tone: string; text: string }> = {
+  checking: { badge: 'Checking…', tone: 'bg-[var(--panel-2)] text-[var(--ink)]', text: 'Asking the relay server for a line from this network…' },
+  working: {
+    badge: 'On ✓',
+    tone: 'bg-[#dcffe5] text-[#106628]',
+    text: 'Friends whose network blocks a direct link (mobile data, some Wi-Fi) are connected through the relay.',
+  },
+  unreachable: {
+    badge: 'Not answering',
+    tone: 'bg-[#ffe9cc] text-[#8a3b00]',
+    text: 'A relay is set up but didn’t answer from this network. This network may block it, or its settings in Vercel need checking.',
+  },
+  off: {
+    badge: 'Off',
+    tone: 'bg-[var(--panel-2)] text-[var(--ink)]',
+    text: 'No relay is set up. Most players connect directly, but some on mobile data or strict Wi-Fi won’t be able to join.',
+  },
+};
+
+/** Is the relay for players who can't connect directly set up, and does it answer from here? */
+function RelayStatusCard() {
+  const [status, setStatus] = useState<RelayStatus | 'checking'>('checking');
+  const run = (fresh = false) => {
+    setStatus('checking');
+    checkRelay(fresh).then(setStatus, () => setStatus('unreachable'));
+  };
+  useEffect(() => run(), []);
+  const t = RELAY_TEXT[status];
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[var(--surface)] p-3">
+      <span className="text-2xl leading-none">📡</span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-ui text-[15px] text-[var(--ink)]">Mobile-data relay</span>
+          <span className={`font-ui rounded-full border-2 border-[var(--ink)] px-2 text-xs leading-5 ${t.tone} ${status === 'checking' ? 'animate-pulse' : ''}`}>{t.badge}</span>
+        </div>
+        <p className="font-body mt-1 text-xs font-semibold leading-snug text-[var(--muted)]">{t.text}</p>
+      </div>
+      {status !== 'checking' && status !== 'off' && (
+        <button type="button" onClick={() => run(true)} className="chip shrink-0 px-2 py-1 text-xs" title="Check again">
+          ↻
         </button>
       )}
     </div>

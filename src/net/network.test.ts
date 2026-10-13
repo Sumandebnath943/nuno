@@ -45,6 +45,8 @@ class Emitter {
 }
 /** Who the pretend server knows about. */
 const server = new Map<string, FakePeer>();
+/** Networks that let peers find each other but block the link itself. */
+const network = { blocked: false };
 let nextId = 0;
 class FakeConn extends Emitter {
   open = false;
@@ -109,6 +111,8 @@ class FakePeer extends Emitter {
       const remote = server.get(target);
       // Like PeerJS: an error on the peer, and the connection just never opens.
       if (!remote) return this.emit('error', { type: 'peer-unavailable', message: `Could not connect to peer ${target}` });
+      // Like PeerJS when the link can't be made: the connection reports a failed negotiation.
+      if (network.blocked) return mine.emit('error', { type: 'negotiation-failed', message: 'Negotiation of connection failed.' });
       remote.emit('connection', theirs);
       mine.open = theirs.open = true;
       theirs.emit('open');
@@ -161,6 +165,7 @@ afterEach(() => {
   sessions.splice(0).forEach((s) => s.destroy());
   setRoomTheme(null);
   server.clear();
+  network.blocked = false;
 });
 
 async function room(code: string) {
@@ -368,5 +373,24 @@ describe('dropping out and coming back', () => {
     await settle(4200);
     expect(server.get('nuno-reop01-host')).toBe(peerOf(host));
     expect(h.errors).toEqual([]);
+  });
+});
+
+describe('networks that block the link', () => {
+  it('a friend whose network blocks the link is told so, not that the host is away', async () => {
+    const he = events();
+    sessions.push(new HostSession('BLOCK1', 'Hosty', '😎', { ...options }, he.on));
+    await settle();
+    network.blocked = true;
+    const ce = events();
+    sessions.push(new ClientSession('BLOCK1', 'Friend', '🦊', ce.on));
+    await settle(60);
+    expect(ce.log.status).toContain('blocked');
+    expect(ce.log.status).not.toContain('waiting');
+    expect(ce.log.errors).toEqual([]);
+    // Once the networks let them through (say the relay kicks in), they get in.
+    network.blocked = false;
+    await settle(1500);
+    expect(ce.log.lobby?.seats[ce.log.seat].name).toBe('Friend');
   });
 });
