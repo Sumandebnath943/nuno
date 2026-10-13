@@ -231,7 +231,7 @@ export const aot: Theme = {
     "--red": "#8b1a1a",
     "--muted": "#5e5546",
     "--soft": "#3f382c",
-    "--faint": "#8f8574",
+    "--faint": "#6d6558",
     "--panel-2": "#d9cdb4",
     "--panel-3": "#e2d8c3",
     "--line": "#cbbd9f",
@@ -245,6 +245,8 @@ export const aot: Theme = {
     "--ring": "rgba(224, 189, 92, 0.95)",
     "--font-display": "'Germania One', 'Lilita One', system-ui, serif",
     "--font-card": "'Germania One', 'Lilita One', system-ui, serif",
+    "--dfs": "1.04",
+    "--ufs": "1.03",
     "--panel-bg":
       "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(0,0,0,0.03)), var(--cream)",
     "--room-bg":

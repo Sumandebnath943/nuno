@@ -29,6 +29,10 @@ How a picture is recognised: "BG" or "background" in the name is the
 background, "hero" is the hero art, "sprite" plus "left"/"right" is corner
 scenery, and anything inside `characters/` is a character.
 
+The background and corner sprites also get a small, blurred copy
+(`bg-soft.webp`, `left-soft.webp`, `right-soft.webp`): during a game the table
+fades to those, so the cards stand out without phones blurring anything live.
+
 ## Characters
 
 Each character becomes a bot opponent in that theme, an avatar you can pick, and

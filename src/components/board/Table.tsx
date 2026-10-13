@@ -17,7 +17,8 @@ interface Props {
   dark?: boolean;
 }
 
-const CHEVRONS = 30;
+/** Chevrons around the rim; small tables get fewer (each one is its own animated layer). */
+const chevronCount = (rx: number, ry: number) => (rx + ry < 520 ? 18 : rx + ry < 800 ? 24 : 30);
 
 /**
  * The oval table. The felt takes on the colour in play so you can read it at a glance,
@@ -31,6 +32,7 @@ export const Table = memo(function Table({ cx, cy, rx, ry, color, direction, rai
   const crx = rx - inset;
   const cry = ry - inset;
   const emblem = Math.min(rx, ry) * 0.9;
+  const CHEVRONS = chevronCount(rx, ry);
 
   return (
     <div

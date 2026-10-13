@@ -393,6 +393,8 @@ class FxEngine {
   private w = 0;
   private h = 0;
   private dpr = 1;
+  /** The ambient layer is soft and slow: phones draw it at 1x, which is a lot less work. */
+  private backDpr = 1;
   private parts: Particle[] = [];
   private amb: Particle[] = [];
   private effects: Effect[] = [];
@@ -497,10 +499,14 @@ class FxEngine {
     this.h = window.innerHeight;
     const cap = this.touch ? 1.5 : 2;
     this.dpr = Math.min(window.devicePixelRatio || 1, cap) * (this.quality < 0.6 ? 0.75 : 1);
-    for (const c of [this.back, this.front]) {
+    this.backDpr = this.touch ? 1 : this.dpr;
+    for (const [c, d] of [
+      [this.back, this.backDpr],
+      [this.front, this.dpr],
+    ] as const) {
       if (!c) continue;
-      c.width = Math.round(this.w * this.dpr);
-      c.height = Math.round(this.h * this.dpr);
+      c.width = Math.round(this.w * d);
+      c.height = Math.round(this.h * d);
       c.style.width = `${this.w}px`;
       c.style.height = `${this.h}px`;
     }
@@ -530,10 +536,10 @@ class FxEngine {
     const dt = dtMs / 1000;
     this.adapt(dtMs);
 
-    // Ambient layer: 30 frames a second is plenty for drifting leaves.
+    // Ambient layer: 30 frames a second is plenty for drifting leaves (20 on phones).
     if (this.ambient && this.bg) {
       this.ambAcc += dtMs;
-      if (this.ambAcc >= 32) {
+      if (this.ambAcc >= (this.touch ? 48 : 32)) {
         this.stepAmbient(this.ambAcc / 1000);
         this.drawAmbient();
         this.ambAcc = 0;
@@ -587,7 +593,7 @@ class FxEngine {
     const g = this.bg!;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, this.back!.width, this.back!.height);
-    for (const p of this.amb) this.drawParticle(g, p, p.twinkle ? p.alpha * (0.55 + 0.45 * Math.sin(p.phase * 2.3)) : p.alpha);
+    for (const p of this.amb) this.drawParticle(g, p, p.twinkle ? p.alpha * (0.55 + 0.45 * Math.sin(p.phase * 2.3)) : p.alpha, 1, this.backDpr);
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1;
   }
@@ -627,10 +633,9 @@ class FxEngine {
     g.globalAlpha = 1;
   }
 
-  private drawParticle(g: CanvasRenderingContext2D, p: Particle, alpha: number, scale = 1) {
+  private drawParticle(g: CanvasRenderingContext2D, p: Particle, alpha: number, scale = 1, d = this.dpr) {
     if (alpha <= 0.01) return;
     const s = p.size * scale;
-    const d = this.dpr;
     const cos = Math.cos(p.rot);
     const sin = Math.sin(p.rot);
     const fx = p.flutter ? Math.cos(p.phase * 1.7) : 1;

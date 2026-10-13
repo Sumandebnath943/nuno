@@ -57,6 +57,14 @@ export function audio(): AudioContext | null {
   return a;
 }
 
+/** The audio context even when game sounds are muted (voice chat needs it). */
+export function audioContext(): AudioContext | null {
+  const a = create();
+  if (a && a.state === 'suspended' && (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive !== false)
+    void a.resume();
+  return a;
+}
+
 export function musicOut(): AudioNode | null {
   return audio() ? musicBus : null;
 }

@@ -22,6 +22,8 @@ export interface BoardLayout {
   seats: SeatSpot[];
   seatW: number;
   seatH: number;
+  /** Widest a seat's name plate may be. */
+  nameMax: number;
   /** Max width the hand may spread to. */
   handMaxW: number;
   /** Distance from the bottom edge to the bottom of the hand. */
@@ -34,10 +36,27 @@ export interface BoardLayout {
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/** How an opponent's face-down hand fans out: card width, how many show, and their spread. */
+export function fanShape(compact: boolean, flip = false) {
+  const miniW = compact ? (flip ? 22 : 19) : flip ? 32 : 30;
+  const max = compact ? 4 : 7;
+  /** Sideways step between cards and their tilt, at the outer edge. */
+  const offset = compact ? 15 : 34;
+  const tilt = compact ? 14 : 22;
+  return { miniW, max, offset, tilt };
+}
+
+/** Half the width a fan can take up (the outer cards tilt outwards). */
+function fanHalf(compact: boolean): number {
+  const f = fanShape(compact);
+  const h = f.miniW * 1.55;
+  return f.offset + h * 1.4 * Math.sin((f.tilt * Math.PI) / 180) + f.miniW / 2;
+}
+
 export function computeLayout(W: number, H: number, opponents: number, safe = { top: 0, bottom: 0 }): BoardLayout {
   const mobile = W < 640;
   const short = H < 560;
-  const topBar = (mobile ? 52 : short ? 50 : 60) + safe.top;
+  const topBar = (mobile ? 50 : short ? 50 : 60) + safe.top;
 
   // Phones get bigger cards: they're tapped with thumbs.
   const cw = mobile
@@ -46,9 +65,10 @@ export function computeLayout(W: number, H: number, opponents: number, safe = { 
   const ch = cw * 1.55;
   const compactSeats = mobile || short || (opponents >= 6 && W < 1100) || opponents >= 8;
   const seatW = compactSeats ? 78 : 124;
-  const seatH = compactSeats ? 88 : 120;
+  const seatH = compactSeats ? 86 : 120;
+  const nameMax = mobile ? (opponents >= 7 ? 74 : 86) : compactSeats ? 112 : 132;
 
-  const controlsRow = mobile ? 64 : 0;
+  const controlsRow = mobile ? 62 : 0;
   const handBottom = (mobile ? 8 : 14) + safe.bottom;
   const handTop = H - handBottom - ch - controlsRow;
 
@@ -58,12 +78,14 @@ export function computeLayout(W: number, H: number, opponents: number, safe = { 
   const ry = Math.max(60, (tableBottom - tableTop) / 2);
   const rx = W / 2 - seatW / 2 - (mobile ? 4 : 22);
 
-  const pileW = mobile ? clamp(rx * 0.4, 54, 76) : cw;
+  const pileW = mobile ? clamp(rx * 0.4, 54, 74) : cw;
   const pileH = pileW * 1.55;
 
+  // Keep every seat (its fan and its name plate) inside the screen.
+  const half = Math.max(fanHalf(compactSeats), nameMax / 2, seatW / 2) + (mobile ? 3 : 8);
   const seats = seatAngles(opponents, rx, ry).map((deg) => {
     const a = (deg * Math.PI) / 180;
-    return { x: W / 2 + rx * Math.cos(a), y: cy - ry * Math.sin(a) };
+    return { x: clamp(W / 2 + rx * Math.cos(a), half, W - half), y: cy - ry * Math.sin(a) };
   });
 
   // Room for your name plate (left) and the NUNO buzzer + action buttons (right).
@@ -86,10 +108,11 @@ export function computeLayout(W: number, H: number, opponents: number, safe = { 
     seats,
     seatW,
     seatH,
+    nameMax,
     handMaxW,
     handBottom,
-    roomForBanner: bannerGap > 74,
-    roomForTicker: tickerGap > 96,
+    roomForBanner: bannerGap > (mobile ? 64 : 74),
+    roomForTicker: tickerGap > (mobile ? 84 : 96),
   };
 }
 

@@ -3,6 +3,7 @@
 import type { BotMoment } from '../game/host';
 import type { BotPersona } from '../game/bot';
 import type { ThemeId } from './settings';
+import { CHARACTER_TAUNTS, linesFor } from './characterTaunts';
 
 /** A sound from the effects library (see fxSounds in sound.ts). */
 export type TauntSound =
@@ -126,7 +127,7 @@ export const THEME_TAUNTS: Record<ThemeId, Taunt[]> = {
 };
 
 const ALL = new Map<string, Taunt>(
-  [...GENERAL_TAUNTS, ...Object.values(THEME_TAUNTS).flat()].map((x) => [x.id, x]),
+  [...GENERAL_TAUNTS, ...Object.values(THEME_TAUNTS).flat(), ...Object.values(CHARACTER_TAUNTS).flat()].map((x) => [x.id, x]),
 );
 
 /** Looks a taunt up by id, whatever theme the sender was using. */
@@ -146,11 +147,18 @@ const MOMENT_MOODS: Record<BotMoment, Taunt['mood'][]> = {
   busted: ['ouch'],
 };
 
-/** A fitting line for a bot, mixing the theme's lines with the general ones. */
-export function botTaunt(moment: BotMoment, theme: ThemeId): Taunt | undefined {
+const pick = <T>(list: T[]): T | undefined => list[Math.floor(Math.random() * list.length)];
+
+/**
+ * A fitting line for a bot. A character speaks in their own voice nearly every
+ * time; everyone else mixes the theme's lines with the general ones.
+ */
+export function botTaunt(moment: BotMoment, theme: ThemeId, avatar?: string): Taunt | undefined {
   const moods = MOMENT_MOODS[moment];
+  const own = linesFor(avatar)?.filter((x) => moods.includes(x.mood)) ?? [];
+  if (own.length && Math.random() < 0.85) return pick(own);
   const pool = [...THEME_TAUNTS[theme], ...THEME_TAUNTS[theme], ...GENERAL_TAUNTS].filter((x) => moods.includes(x.mood));
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pick(pool);
 }
 
 /** Opponents that fit the theme. */

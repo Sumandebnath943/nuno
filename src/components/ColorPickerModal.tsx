@@ -56,7 +56,7 @@ export const ColorPickerModal: React.FC<Props> = ({
   return (
     <Modal open={open} onClose={onCancel} className="max-w-sm">
       <div className="p-5 text-center sm:p-6">
-        <h2 className="font-display text-3xl">{title}</h2>
+        <h2 className="font-display text-2xl sm:text-3xl">{title}</h2>
         <p className="mt-1 text-sm font-medium text-[var(--muted)]">{subtitle}</p>
 
         <svg viewBox="-112 -112 224 224" className="mx-auto mt-4 w-60 overflow-visible sm:w-64" role="group" aria-label="Colours">

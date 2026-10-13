@@ -85,7 +85,7 @@ export function WheelPickModal({ open, kind, hand, side, onDone }: Props) {
   return (
     <Modal open={open} className="max-w-xl">
       <div className="p-4 sm:p-5">
-        <h2 className="font-display text-center text-3xl">{step === 'top' ? 'Which card goes on top?' : title}</h2>
+        <h2 className="font-display text-center text-2xl sm:text-3xl">{step === 'top' ? 'Which card goes on top?' : title}</h2>
         <p className="mt-1 text-center text-sm font-medium text-[var(--muted)]">
           {step === 'top' ? 'The next player has to match the top card.' : sub}
         </p>

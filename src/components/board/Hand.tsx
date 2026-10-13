@@ -1,5 +1,4 @@
-import { forwardRef, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { Card, Side } from '../../game/types';
 import { cardLabel } from '../../game/cards';
 import { CARD_RATIO, CardView } from '../CardView';
@@ -29,7 +28,11 @@ interface Props {
 /** Cards can't overlap more than this before the hand turns into a scrollable strip. */
 const MIN_SPACING = 0.36;
 
-/** Your hand, fanned along the bottom of the table. */
+/**
+ * Your hand, fanned along the bottom of the table. Cards glide between spots
+ * with CSS transitions (they run off the main thread, so a busy phone doesn't
+ * stutter), and each card only re-renders when something about it changes.
+ */
 export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
   { cards, cw, maxWidth, bottom, hidden, playable, myTurn, dimOthers, highlightId, side, touch, registerCard, onPlay, describe },
   ref,
@@ -70,6 +73,10 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
     sfx.hover();
     setPicked(card.id);
   };
+  // One stable handler for every card, so the cards themselves can skip re-rendering.
+  const tapRef = useRef(tap);
+  tapRef.current = tap;
+  const onTap = useCallback((card: Card, el: HTMLElement) => tapRef.current(card, el), []);
 
   const slots = cards.map((card, i) => {
     const isPlayable = playable.has(card.id);
@@ -78,55 +85,27 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
     const rot = scroll ? 0 : (i - mid) * rotStep;
     const arc = mid > 0 && !scroll ? ((i - mid) / mid) ** 2 * curve : 0;
     const raise = isPicked ? -cw * 0.55 : isDrawn ? -cw * 0.34 : isPlayable ? -lift : 0;
-    const help = describe?.(card) ?? null;
     return (
-      <motion.div
+      <HandCard
         key={card.id}
-        className="hand-slot absolute bottom-0 left-0"
-        style={{ zIndex: isPicked ? 300 : i + 1, transformOrigin: '50% 100%' }}
-        initial={false}
-        animate={{ x: i * spacing, y: arc + raise, rotate: isPicked ? 0 : rot, scale: isPicked ? 1.12 : 1 }}
-        transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.8 }}
-      >
-        {isPicked && (
-          <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-[220px] -translate-x-1/2 flex-col items-center gap-1 animate-popIn">
-            {help && (
-              <span className="rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)]">
-                <b className="font-display text-xs text-[var(--ink)]">{help.name}</b>
-                <br />
-                {help.text}
-              </span>
-            )}
-            <span
-              className={`font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2 text-xs leading-6 shadow-[0_2px_0_var(--ink)] ${
-                isPlayable ? 'bg-[var(--yellow)] text-[var(--ink)]' : 'bg-[var(--surface)] text-[var(--muted)]'
-              }`}
-            >
-              {!myTurn ? 'Not your turn' : isPlayable ? 'Tap again to play' : 'Can’t play this'}
-            </span>
-          </span>
-        )}
-        {!touch && help && (
-          <span className="card-tip absolute bottom-full left-1/2 z-10 mb-6 w-max max-w-[220px] rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)]">
-            <b className="font-display text-xs text-[var(--ink)]">{help.name}</b>
-            <br />
-            {help.text}
-          </span>
-        )}
-        <button
-          type="button"
-          ref={(el) => registerCard(card.id, el)}
-          data-card-w={cw}
-          data-rot={rot}
-          disabled={!myTurn && !touch}
-          onClick={(e) => tap(card, e.currentTarget)}
-          aria-label={`${cardLabel(card)}${isPlayable ? ' (playable)' : ''}`}
-          className={`hand-card block rounded-[10%/6.5%] p-0 ${isPlayable ? 'is-playable' : ''}`}
-          style={{ visibility: hidden.has(card.id) ? 'hidden' : 'visible' }}
-        >
-          <CardView card={card} side={side} width={cw} glow={isPlayable} dim={dimOthers && !isPlayable} />
-        </button>
-      </motion.div>
+        card={card}
+        x={i * spacing}
+        y={arc + raise}
+        rot={isPicked ? 0 : rot}
+        layoutRot={rot}
+        z={isPicked ? 300 : i + 1}
+        picked={isPicked}
+        playable={isPlayable}
+        hidden={hidden.has(card.id)}
+        dim={dimOthers && !isPlayable}
+        myTurn={myTurn}
+        touch={touch}
+        cw={cw}
+        side={side}
+        help={describe?.(card) ?? null}
+        registerCard={registerCard}
+        onTap={onTap}
+      />
     );
   });
 
@@ -146,12 +125,103 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
   }
 
   return (
-    <div
-      ref={ref}
-      className="absolute left-1/2 z-30"
-      style={{ bottom, width: Math.max(total, cw), height: ch, transform: 'translateX(-50%)' }}
-    >
+    <div ref={ref} className="absolute left-1/2 z-30" style={{ bottom, width: Math.max(total, cw), height: ch, transform: 'translateX(-50%)' }}>
       {slots}
     </div>
   );
 });
+
+interface CardProps {
+  card: Card;
+  x: number;
+  y: number;
+  rot: number;
+  /** The tilt the card has in the fan (flights land at it). */
+  layoutRot: number;
+  z: number;
+  picked: boolean;
+  playable: boolean;
+  hidden: boolean;
+  dim: boolean;
+  myTurn: boolean;
+  touch: boolean;
+  cw: number;
+  side?: Side;
+  help: { name: string; text: string } | null;
+  registerCard: (id: string, el: HTMLElement | null) => void;
+  onTap: (card: Card, el: HTMLElement) => void;
+}
+
+const HandCard = memo(
+  function HandCard({ card, x, y, rot, layoutRot, z, picked, playable, hidden, dim, myTurn, touch, cw, side, help, registerCard, onTap }: CardProps) {
+    return (
+      <div
+        className="hand-slot absolute bottom-0 left-0"
+        style={{
+          zIndex: z,
+          transformOrigin: '50% 100%',
+          transform: `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${rot.toFixed(2)}deg) scale(${picked ? 1.12 : 1})`,
+        }}
+      >
+        {picked && (
+          <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-[220px] -translate-x-1/2 flex-col items-center gap-1 animate-popIn">
+            {help && (
+              <span className="font-body rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11.5px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)]">
+                <b className="font-ui text-xs text-[var(--ink)]">{help.name}</b>
+                <br />
+                {help.text}
+              </span>
+            )}
+            <span
+              className={`font-ui whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2 text-xs leading-6 shadow-[0_2px_0_var(--ink)] ${
+                playable ? 'bg-[var(--yellow)] text-[var(--ink)]' : 'bg-[var(--surface)] text-[var(--muted)]'
+              }`}
+            >
+              {!myTurn ? 'Not your turn' : playable ? 'Tap again to play' : 'Can’t play this'}
+            </span>
+          </span>
+        )}
+        {!touch && help && (
+          <span className="card-tip font-body absolute bottom-full left-1/2 z-10 mb-6 w-max max-w-[220px] rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)]">
+            <b className="font-ui text-xs text-[var(--ink)]">{help.name}</b>
+            <br />
+            {help.text}
+          </span>
+        )}
+        <button
+          type="button"
+          ref={(el) => registerCard(card.id, el)}
+          data-card-w={cw}
+          data-rot={layoutRot}
+          disabled={!myTurn && !touch}
+          onClick={(e) => onTap(card, e.currentTarget)}
+          aria-label={`${cardLabel(card)}${playable ? ' (playable)' : ''}`}
+          className={`hand-card block rounded-[10%/6.5%] p-0 ${playable ? 'is-playable' : ''}`}
+          style={{ visibility: hidden ? 'hidden' : 'visible' }}
+        >
+          <CardView card={card} side={side} width={cw} glow={playable} dim={dim} />
+        </button>
+      </div>
+    );
+  },
+  (a, b) =>
+    a.card.id === b.card.id &&
+    a.card.color === b.card.color &&
+    a.card.value === b.card.value &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.rot === b.rot &&
+    a.layoutRot === b.layoutRot &&
+    a.z === b.z &&
+    a.picked === b.picked &&
+    a.playable === b.playable &&
+    a.hidden === b.hidden &&
+    a.dim === b.dim &&
+    a.myTurn === b.myTurn &&
+    a.touch === b.touch &&
+    a.cw === b.cw &&
+    a.side === b.side &&
+    a.help?.text === b.help?.text &&
+    a.registerCard === b.registerCard &&
+    a.onTap === b.onTap,
+);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import type { GameView, Intent, Difficulty, GameMode } from './game/types';
 import type { ChatMessage, LobbyState, RoomOptions } from './net/protocol';
 import { ClientSession, HostSession, LocalSession, type Session } from './net/network';
@@ -9,7 +9,8 @@ import { RulesModal } from './components/RulesModal';
 import { CardDefs } from './components/CardView';
 import { Logo } from './components/ui';
 import { ThemeBackdrop } from './components/ThemeStage';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsModal, type SettingsTab } from './components/SettingsModal';
+import { Intro } from './components/Intro';
 import { THEMES, ThemeContext } from './themes';
 import { useSettings } from './lib/settings';
 
@@ -50,18 +51,19 @@ export const App: React.FC = () => {
     mode: 'classic',
     focus: 'rules',
   });
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
+  const openSettings = (tab: SettingsTab = 'themes') => setSettingsTab(tab);
   const sessionRef = useRef<Session | null>(null);
   const settings = useSettings();
   const theme = THEMES[settings.theme];
+  // The opening plays every time the game is opened.
+  const [intro, setIntro] = useState(true);
+  const [inviteCode] = useState(() => new URLSearchParams(window.location.search).get('room'));
 
-  // Check URL query param for room invite on mount
+  // An invite link joins the room straight away (it connects while the intro plays).
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const roomParam = params.get('room');
-    if (roomParam) {
-      handleJoinRoom(roomParam);
-    }
+    if (inviteCode) handleJoinRoom(inviteCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleUpdateProfile = (name: string, avatar: string) => {
@@ -155,11 +157,11 @@ export const App: React.FC = () => {
     setScreen('home');
   };
 
-  const handleAction = (intent: Intent) => {
-    if (session) {
-      session.sendAction(intent);
-    }
-  };
+  // Stable, so the table's memoised seats don't re-render on every move.
+  const handleAction = useCallback((intent: Intent) => {
+    sessionRef.current?.sendAction(intent);
+  }, []);
+  const seatPeers = useMemo(() => lobby?.seats.map((s, i) => (i === lobby.hostSeat ? lobby.hostPeerId : s.peerId)), [lobby]);
 
   const handleNextRound = () => {
     if (session) {
@@ -177,7 +179,7 @@ export const App: React.FC = () => {
         <CardDefs />
         {/* The room and its scenery sit behind every screen. */}
         <div className="bg-room fixed inset-0" aria-hidden="true">
-          <ThemeBackdrop />
+          <ThemeBackdrop focus={screen === 'game'} />
         </div>
 
         {/* Toast Error Alert */}
@@ -203,7 +205,7 @@ export const App: React.FC = () => {
             onCreateRoom={handleCreateRoom}
             onJoinRoom={handleJoinRoom}
             onOpenRules={openRules}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={openSettings}
           />
         )}
 
@@ -232,7 +234,8 @@ export const App: React.FC = () => {
             onSendChat={(text) => session?.sendChat(text)}
             onLeave={handleLeave}
             onOpenRules={(m) => openRules(m)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={openSettings}
+            voice={session?.voice}
           />
         )}
 
@@ -242,13 +245,15 @@ export const App: React.FC = () => {
             isHost={session?.isHost ?? false}
             roomId={lobby?.roomId}
             chatMessages={chatMessages}
+            voice={session?.voice}
+            seatPeers={seatPeers}
             onAction={handleAction}
             onTaunt={(id) => session?.sendTaunt(id)}
             onLeave={handleLeave}
             onNextRound={handleNextRound}
             onNewGame={handleNewGame}
             onOpenRules={() => openRules(view.mode)}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={openSettings}
           />
         )}
 
@@ -258,7 +263,13 @@ export const App: React.FC = () => {
           focus={rules.focus}
           onClose={() => setRules((r) => ({ ...r, open: false }))}
         />
-        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenRules={() => openRules(view?.mode ?? 'classic')} />
+        <SettingsModal
+          open={settingsTab !== null}
+          tab={settingsTab ?? 'themes'}
+          onClose={() => setSettingsTab(null)}
+          onOpenRules={() => openRules(view?.mode ?? 'classic')}
+        />
+        {intro && <Intro joining={inviteCode} onDone={() => setIntro(false)} />}
       </div>
     </ThemeContext.Provider>
   );

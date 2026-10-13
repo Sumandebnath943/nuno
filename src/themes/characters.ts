@@ -36,6 +36,8 @@ export interface Scenery {
   url: string;
   w: number;
   h: number;
+  /** A small, pre-blurred copy for behind the table during a game. */
+  soft?: string;
 }
 
 export interface ThemeArt {
@@ -50,6 +52,7 @@ interface ManifestFile {
   file: string;
   w: number;
   h: number;
+  soft?: string;
 }
 interface ManifestCharacter extends ManifestFile {
   id: string;
@@ -76,7 +79,9 @@ export function fromManifest(manifest: Manifest, urlOf: (theme: string, file: st
     if (!entry || !THEME_IDS.includes(theme as ThemeId)) continue;
     const scene = (f?: ManifestFile): Scenery | undefined => {
       const url = f && urlOf(theme, f.file);
-      return url ? { url, w: f.w, h: f.h } : undefined;
+      if (!url) return undefined;
+      const soft = f.soft ? urlOf(theme, f.soft) : undefined;
+      return { url, w: f.w, h: f.h, ...(soft ? { soft } : {}) };
     };
     const characters: Character[] = [];
     for (const c of entry.characters ?? []) {

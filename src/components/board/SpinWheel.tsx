@@ -46,7 +46,8 @@ export function SpinWheel({ waitingFor, spin, players, me, size, x, y, onSpin }:
       style={{ left: x, top: y }}
     >
       <div className="relative" style={{ width: size, height: size }}>
-        <div className="absolute inset-0 rounded-full bg-[rgba(10,8,30,0.35)] blur-xl" />
+        {/* a soft shadow (a gradient, not a blur filter: much cheaper on phones) */}
+        <div className="absolute -inset-[12%] rounded-full" style={{ background: 'radial-gradient(closest-side, rgba(10,8,30,0.5), rgba(10,8,30,0) 100%)' }} />
         <motion.svg
           key={spin?.id ?? 'idle'}
           viewBox="-110 -110 220 220"

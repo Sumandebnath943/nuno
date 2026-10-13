@@ -25,7 +25,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / 'src' / 'assets' / 'characters'
@@ -39,6 +39,12 @@ FACE_PX = 192  # profile picture
 BG_MAX_W = 1672
 SPRITE_MAX = 1000
 HERO_MAX_H = 1200
+# Soft-focus copies used behind the table during a game. Blurring them here
+# (instead of with a CSS filter) costs phones nothing while they play.
+SOFT_BG_W = 720
+SOFT_BG_BLUR = 7
+SOFT_SPRITE_MAX = 520
+SOFT_SPRITE_BLUR = 2.2
 
 
 def slug(name: str) -> str:
@@ -122,6 +128,20 @@ def save(im: Image.Image, path: Path, quality: int, alpha: bool = True):
     return path.stat().st_size
 
 
+def soften(im: Image.Image, max_side: int, radius: float, alpha: bool) -> Image.Image:
+    """A small, blurred copy. Transparent pictures are blurred with premultiplied
+    alpha so their edges don't pick up a dark fringe."""
+    s = min(1.0, max_side / max(im.size))
+    small = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
+    if not alpha:
+        return small.convert('RGB').filter(ImageFilter.GaussianBlur(radius))
+    pad = round(radius * 3)
+    canvas = Image.new('RGBA', (small.width + pad * 2, small.height + pad * 2), (0, 0, 0, 0))
+    canvas.paste(small, (pad, pad))
+    blurred = canvas.convert('RGBa').filter(ImageFilter.GaussianBlur(radius)).convert('RGBA')
+    return blurred.crop((pad, pad, pad + small.width, pad + small.height))
+
+
 def role(path: Path) -> str | None:
     if path.parent.name.lower() == 'characters':
         return 'character'
@@ -162,12 +182,18 @@ def main():
             if kind == 'backdrop':
                 out = fit(im, BG_MAX_W, 2000)
                 size = save(out, OUT / theme / 'bg.webp', 76, alpha=False)
-                entry['backdrop'] = {'file': 'bg.webp', 'w': out.width, 'h': out.height}
+                soft = soften(out, SOFT_BG_W, SOFT_BG_BLUR, alpha=False)
+                size += save(soft, OUT / theme / 'bg-soft.webp', 70, alpha=False)
+                entry['backdrop'] = {'file': 'bg.webp', 'w': out.width, 'h': out.height, 'soft': 'bg-soft.webp'}
             elif kind in ('hero', 'left', 'right'):
                 out = trim(im)
                 out = fit(out, SPRITE_MAX if kind != 'hero' else 2000, HERO_MAX_H if kind == 'hero' else SPRITE_MAX)
                 size = save(out, OUT / theme / f'{kind}.webp', 80)
                 entry[kind] = {'file': f'{kind}.webp', 'w': out.width, 'h': out.height}
+                if kind != 'hero':
+                    soft = soften(out, SOFT_SPRITE_MAX, SOFT_SPRITE_BLUR, alpha=True)
+                    size += save(soft, OUT / theme / f'{kind}-soft.webp', 72)
+                    entry[kind]['soft'] = f'{kind}-soft.webp'
             else:
                 note = notes.get(path.stem, {})
                 if note.get('crop'):

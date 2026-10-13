@@ -29,7 +29,11 @@ Where a physical game leaves something to chance or doesn't say, NUNO had to pic
 
 ## 🎨 Themes
 
-Pick a theme from the menu (or ⚙️ Settings, even mid-game). A theme restyles the whole app — room scenery, table, card backs and faces, fonts, particles, effects, sounds, soundtrack, bot names and trash talk — and adds its own twist. Themes are cosmetic and per player: everyone in an online room can use a different one.
+Tap **🎨 Themes** on the menu (or open Settings, even mid-game) to swipe through the theme gallery: big cards with each theme's scenery, hero and card back, and the characters you'll face. The whole sheet repaints in whichever theme is in the middle; nothing is saved until you tap **Select**, which plays that theme's entrance. A theme restyles the whole app — room scenery, table, card backs and faces, fonts, particles, effects, sounds, soundtrack, bot names and trash talk — and adds its own twist.
+
+In an online room the **host's theme is the room's theme**: everyone who joins switches to it (and follows along if the host changes it, even mid-game), and gets their own theme back when they leave.
+
+During a game the scenery drops into soft focus (pre-blurred copies made by `npm run art`, so phones don't blur anything live), and the characters in the corners breathe and sway a little.
 
 | Theme | Look | Its twist |
 | --- | --- | --- |
@@ -47,7 +51,21 @@ Each theme can use your own pictures: a background, title art for the menu, two 
 
 ## 💬 Trash talk
 
-Tap **Talk** on your name plate to fling a ready-made line at the table — it floats up from your seat with a sound for everyone to see. Every theme adds its own lines, and bots talk back now and then.
+Tap **Talk** on your name plate to fling a ready-made line at the table — it floats up from your seat with a sound for everyone to see. Every theme adds its own lines, and bots talk back now and then. Bots playing as a character speak in that character's own voice: every one of them has lines only they would say (`src/lib/characterTaunts.ts`).
+
+## 🎙️ Voice chat
+
+In online rooms everyone can talk while they play. Tap 🎙️ to turn your mic on (it's off until you do) and 🎧 to stop hearing the others. Whoever is talking gets a green ring around their picture; tap the mic badge on someone's seat to mute just them. Voice links run straight between players (WebRTC), like the game itself.
+
+Phones on mobile data often sit behind carrier NAT, where direct links (game and voice) can fail. Adding a TURN relay fixes that: set `VITE_TURN_URLS` (comma-separated `turn:` URLs), `VITE_TURN_USERNAME` and `VITE_TURN_CREDENTIAL` in your environment (for example in Vercel's project settings) and rebuild.
+
+## 🪑 Seating
+
+When an online game starts, the table is shuffled: friends are spread out with bots between them, so humans don't all sit in a row and bots don't all play one after another. Every new game reshuffles.
+
+## 🎬 The opening
+
+Every time the game opens, the NUNO letters slam onto the table (the O always arrives late), the deck fans out and the theme's hero rises behind them. The **TAP TO PLAY** button that ends it is what lets the browser play sound, so the stinger and music start right away; on Android it also goes full screen. Invite links connect to the room while it plays.
 
 ## 🐢 Pace
 
@@ -85,7 +103,8 @@ Bots wait until the table has finished showing the last move, then think. Big pl
   - On phones: bigger cards, tap once to pick a card up and again to play it, big hands become a swipeable strip, menus open as bottom sheets, and the layout avoids the notch and home bar.
 - Procedural WebAudio sound effects and soundtracks (no audio files to load): airhorns, sad trombones, slide whistles and more, plus a soundtrack per theme that picks up when someone is one card from winning. Separate effects and music volumes in Settings.
 - **How to play** covers every mode in full: your turn step by step, every special rule, every card in the deck with how many there are and what they score, the questions people ask, and scoring.
-- Built to stay smooth on phones: compositor-only animations, a canvas effects engine that sleeps when idle and lowers its particle count if frames drop, and no audio buffers allocated per sound.
+- Built to stay smooth on phones: card flights run on the Web Animations API and your hand glides with CSS transitions (both on the compositor, so a busy phone doesn't stutter), splashes and cut-ins are pure CSS, the canvas effects engine sleeps when idle, draws the ambient layer at 1x and 20fps on phones and lowers its particle count if frames drop, and no audio buffers are allocated per sound.
+- Text is sized per theme font: wide fonts (Bungee, Shojumaru) render smaller and narrow ones (Bangers) larger, names shrink or wrap to two lines instead of being cut off, and big splash words always fit the screen.
 - Keyboard shortcuts: `D` draw, `K` keep the drawn card, `U`/`Space` shout NUNO, `S` sort your hand.
 
 ---

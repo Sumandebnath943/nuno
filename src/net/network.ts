@@ -2,17 +2,19 @@ import { BOT_PERSONAS, pickPersonas as pickFrom, type BotPersona } from '../game
 import { createGame, toView } from '../game/engine';
 import { GameHost, type BotMoment } from '../game/host';
 import type { Action, GameView, Intent, SeatConfig } from '../game/types';
-import { getSettings } from '../lib/settings';
+import { getSettings, setRoomTheme, subscribeSettings, type ThemeId } from '../lib/settings';
 import { botTaunt, findTaunt, THEME_BOTS } from '../lib/taunts';
 import { artFor, characterAvatar } from '../themes/characters';
-import type { ChatMessage, ClientMessage, LobbySeat, LobbyState, RoomOptions, ServerMessage } from './protocol';
+import { iceServers } from './ice';
+import { mixSeats } from './seating';
+import { VoiceChat } from './voice';
+import type { ChatMessage, ClientMessage, LobbySeat, LobbyState, RoomOptions, ServerMessage, VoiceState } from './protocol';
 
 /**
- * Bots dress for the theme the host is using: character pictures you've added
- * for that theme come first, then the theme's own nicknames.
+ * Bots dress for the room's theme: that theme's characters come first, then
+ * its own nicknames.
  */
-function pickPersonas(count: number, exclude: string[] = []): BotPersona[] {
-  const theme = getSettings().theme;
+function pickPersonas(theme: ThemeId, count: number, exclude: string[] = []): BotPersona[] {
   const chars = artFor(theme)
     .characters.map((c) => ({ name: c.name, avatar: characterAvatar(c) }))
     .filter((c) => !exclude.includes(c.avatar) && !exclude.includes(c.name));
@@ -23,8 +25,8 @@ function pickPersonas(count: number, exclude: string[] = []): BotPersona[] {
 
 const newId = () => Math.random().toString(36).slice(2);
 
-/** Lets bots trash talk now and then, without flooding the table. */
-function botTalker(seatOf: () => { name: string; avatar: string }[], say: (msg: ChatMessage) => void) {
+/** Lets bots trash talk now and then, without flooding the table. Characters say their own lines. */
+function botTalker(seatOf: () => { name: string; avatar: string }[], theme: () => ThemeId, say: (msg: ChatMessage) => void) {
   let lastAny = 0;
   const lastBy = new Map<number, number>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -32,7 +34,7 @@ function botTalker(seatOf: () => { name: string; avatar: string }[], say: (msg: 
     const chance = moment === 'win' ? 0.6 : moment === 'hit' || moment === 'attack' ? 0.35 : 0.22;
     const at = Date.now() + delayMs;
     if (Math.random() > chance || at - lastAny < 4500 || at - (lastBy.get(seat) ?? 0) < 12000) return;
-    const taunt = botTaunt(moment, getSettings().theme);
+    const taunt = botTaunt(moment, theme(), seatOf()[seat]?.avatar);
     if (!taunt) return;
     lastAny = at;
     lastBy.set(seat, at);
@@ -70,7 +72,14 @@ export interface Session {
   updateOptions?: (opts: Partial<RoomOptions>) => void;
   /** Host only: start a brand-new game with the same seats and settings. */
   restart?: () => void;
+  /** Online rooms only. */
+  voice?: VoiceChat;
   destroy: () => void;
+}
+
+/** Everyone's peer id, so voice chat knows who to link with. */
+function participants(lobby: LobbyState): string[] {
+  return [lobby.hostPeerId, ...lobby.seats.filter((s) => s.kind === 'remote' && s.peerId).map((s) => s.peerId!)].filter(Boolean);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -81,8 +90,10 @@ export class LocalSession implements Session {
   readonly mySeat = 0;
   private host: GameHost | null = null;
   private unsub?: () => void;
+  private readonly theme = getSettings().theme;
   private talker = botTalker(
     () => this.host?.state.players ?? [],
+    () => this.theme,
     (msg) => this.events.onChat(msg),
   );
 
@@ -97,7 +108,7 @@ export class LocalSession implements Session {
 
   private initGame() {
     const botsNeeded = this.options.playerCount - 1;
-    const personas = pickPersonas(botsNeeded, [this.playerAvatar]);
+    const personas = pickPersonas(this.theme, botsNeeded, [this.playerAvatar]);
     const seats: SeatConfig[] = [
       { name: this.playerName || 'You', avatar: this.playerAvatar || '😎', kind: 'human' },
       ...personas.map((p) => ({ name: p.name, avatar: p.avatar, kind: 'bot' as const })),
@@ -152,19 +163,23 @@ export class LocalSession implements Session {
 // ─────────────────────────────────────────────────────────────
 export class HostSession implements Session {
   readonly isHost = true;
-  readonly mySeat = 0;
   private peer: Peer | null = null;
   private connections = new Map<number, DataConnection>();
   private host: GameHost | null = null;
   private unsub?: () => void;
+  private unsubSettings: () => void;
   private lobby: LobbyState;
   private destroyed = false;
   /** When each seat last trash talked (simple flood control). */
   private lastTaunt = new Map<number, number>();
+  /** Everyone's voice chat state, by peer id. */
+  private voiceStates: Record<string, VoiceState> = {};
   private talker = botTalker(
     () => this.host?.state.players ?? [],
+    () => this.lobby.theme,
     (msg) => this.broadcastChat(msg),
   );
+  readonly voice = new VoiceChat((state) => this.setVoice(this.lobby.hostPeerId, state));
 
   constructor(
     public roomId: string,
@@ -173,19 +188,29 @@ export class HostSession implements Session {
     private options: RoomOptions,
     private events: SessionEvents,
   ) {
+    const theme = getSettings().ownTheme;
     this.lobby = {
       roomId,
       hostPeerId: '',
-      seats: this.buildSeats(),
+      hostSeat: 0,
+      seats: [],
       options: { ...options },
       inGame: false,
+      theme,
     };
+    this.lobby.seats = this.buildSeats();
+    // The host's theme is the room's: follow it when they change it.
+    this.unsubSettings = subscribeSettings(() => this.followTheme());
     this.initPeer();
+  }
+
+  get mySeat() {
+    return this.lobby.hostSeat;
   }
 
   private buildSeats(): LobbySeat[] {
     const seats: LobbySeat[] = [{ name: this.playerName, avatar: this.playerAvatar, kind: 'human' }];
-    const bots = pickPersonas(this.options.playerCount - 1, [this.playerAvatar]);
+    const bots = pickPersonas(this.lobby.theme, this.options.playerCount - 1, [this.playerAvatar]);
     for (let i = 1; i < this.options.playerCount; i++) {
       seats.push({
         name: bots[i - 1].name,
@@ -196,6 +221,20 @@ export class HostSession implements Session {
     return seats;
   }
 
+  private followTheme() {
+    const theme = getSettings().ownTheme;
+    if (theme === this.lobby.theme || this.destroyed) return;
+    this.lobby.theme = theme;
+    // Before the game, the bots change outfits too.
+    if (!this.lobby.inGame) {
+      const keep = this.lobby.seats.filter((s) => s.kind !== 'bot').map((s) => s.avatar);
+      const bots = pickPersonas(theme, this.lobby.seats.filter((s) => s.kind === 'bot').length, keep);
+      let b = 0;
+      this.lobby.seats = this.lobby.seats.map((s) => (s.kind === 'bot' ? { name: bots[b].name, avatar: bots[b++].avatar, kind: 'bot' } : s));
+    }
+    this.broadcastLobby();
+  }
+
   private async initPeer() {
     try {
       const { Peer } = await import('peerjs');
@@ -203,17 +242,12 @@ export class HostSession implements Session {
       const peerId = `nuno-${this.roomId.toLowerCase()}-host`;
       this.peer = new Peer(peerId, {
         debug: 1,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-          ],
-        },
+        config: { iceServers: iceServers() },
       });
 
       this.peer.on('open', (id) => {
         this.lobby.hostPeerId = id;
+        this.voice.attach(this.peer!);
         this.broadcastLobby();
         this.events.onConnected?.();
       });
@@ -225,7 +259,8 @@ export class HostSession implements Session {
       this.peer.on('error', (err) => {
         if (this.destroyed) return;
         console.warn('PeerJS Host error:', err);
-        // If host ID is taken, notify user
+        // A voice link to someone who just left: nothing to tell the player.
+        if (err.type === 'peer-unavailable') return;
         if (err.type === 'unavailable-id') {
           this.events.onError('Room code already in use. Please choose another code.');
         } else {
@@ -265,7 +300,8 @@ export class HostSession implements Session {
       }
       // Find open seat
       let assignedSeat = -1;
-      for (let i = 1; i < this.lobby.seats.length; i++) {
+      for (let i = 0; i < this.lobby.seats.length; i++) {
+        if (i === this.lobby.hostSeat) continue;
         if (this.lobby.seats[i].kind === 'bot' || !this.connections.has(i)) {
           assignedSeat = i;
           break;
@@ -309,6 +345,7 @@ export class HostSession implements Session {
       });
 
       this.broadcastLobby();
+      conn.send({ type: 'voice', states: this.voiceStates } as ServerMessage);
 
       if (this.lobby.inGame && this.host) {
         // Reconnected during game! Reassign seat in game host
@@ -326,6 +363,8 @@ export class HostSession implements Session {
     } else if (msg.type === 'taunt') {
       const seat = this.getSeatForConnection(conn);
       if (seat !== -1) this.taunt(seat, msg.id);
+    } else if (msg.type === 'voice') {
+      if (this.getSeatForConnection(conn) !== -1) this.setVoice(conn.peer, { mic: !!msg.mic, speaking: !!msg.speaking });
     } else if (msg.type === 'chat') {
       const seat = this.getSeatForConnection(conn);
       if (seat !== -1) {
@@ -348,7 +387,7 @@ export class HostSession implements Session {
       this.connections.delete(seat);
       const prevName = this.lobby.seats[seat].name;
       // Convert seat to Bot so game doesn't stall
-      const bot = pickPersonas(1, this.lobby.seats.map((x) => x.avatar))[0];
+      const bot = pickPersonas(this.lobby.theme, 1, this.lobby.seats.map((x) => x.avatar))[0];
       this.lobby.seats[seat] = {
         name: `${bot.name} (sub)`,
         avatar: bot.avatar,
@@ -367,6 +406,11 @@ export class HostSession implements Session {
       if (this.host) {
         this.host.setSeatKind(seat, 'bot', 'Replaced disconnected player');
       }
+      if (this.voiceStates[conn.peer]) {
+        const { [conn.peer]: _gone, ...rest } = this.voiceStates;
+        this.voiceStates = rest;
+        this.broadcastVoice();
+      }
       this.broadcastLobby();
     }
   }
@@ -379,7 +423,8 @@ export class HostSession implements Session {
   }
 
   private broadcastLobby() {
-    this.events.onLobby({ ...this.lobby }, 0);
+    this.events.onLobby({ ...this.lobby }, this.lobby.hostSeat);
+    this.voice.setParticipants(participants(this.lobby));
     for (const [seat, conn] of this.connections.entries()) {
       conn.send({
         type: 'lobby',
@@ -396,23 +441,52 @@ export class HostSession implements Session {
     }
   }
 
+  private setVoice(peerId: string, state: VoiceState) {
+    if (!peerId) return;
+    const prev = this.voiceStates[peerId];
+    if (prev && prev.mic === state.mic && prev.speaking === state.speaking) return;
+    this.voiceStates = { ...this.voiceStates, [peerId]: state };
+    this.broadcastVoice();
+  }
+
+  private broadcastVoice() {
+    this.voice.setStates(this.voiceStates);
+    for (const conn of this.connections.values()) conn.send({ type: 'voice', states: this.voiceStates } as ServerMessage);
+  }
+
+  /**
+   * Shuffles the table for a new game: friends spread out with bots between
+   * them, in a random order. Connections follow their players to the new seats.
+   */
+  private reseat() {
+    const order = mixSeats(this.lobby.seats.map((s) => s.kind !== 'bot'));
+    const connections = new Map<number, DataConnection>();
+    order.forEach((old, seat) => {
+      const conn = this.connections.get(old);
+      if (conn) connections.set(seat, conn);
+    });
+    this.lobby.seats = order.map((old) => this.lobby.seats[old]);
+    this.lobby.hostSeat = order.indexOf(this.lobby.hostSeat);
+    this.connections = connections;
+    this.lastTaunt.clear();
+  }
+
+  private seatConfigs(): SeatConfig[] {
+    return this.lobby.seats.map((s) => ({ name: s.name, avatar: s.avatar, kind: s.kind }));
+  }
+
   startGame() {
     if (this.lobby.inGame) return;
     this.lobby.inGame = true;
+    this.reseat();
 
-    const seats: SeatConfig[] = this.lobby.seats.map((s) => ({
-      name: s.name,
-      avatar: s.avatar,
-      kind: s.kind,
-    }));
-
-    const state = createGame(seats, this.lobby.options.targetScore, this.lobby.options.mode);
+    const state = createGame(this.seatConfigs(), this.lobby.options.targetScore, this.lobby.options.mode);
     this.host = new GameHost(state, this.lobby.options.difficulty);
     this.host.onBotMoment = this.talker.talk;
 
     this.unsub = this.host.subscribe((s) => {
       // Local view
-      this.events.onView(toView(s, 0));
+      this.events.onView(toView(s, this.lobby.hostSeat));
       // Send individual redacted views to each connected client
       for (const [seat, conn] of this.connections.entries()) {
         conn.send({
@@ -427,14 +501,16 @@ export class HostSession implements Session {
 
   restart() {
     if (!this.host) return;
-    const seats: SeatConfig[] = this.lobby.seats.map((s) => ({ name: s.name, avatar: s.avatar, kind: s.kind }));
-    this.host.replace(createGame(seats, this.lobby.options.targetScore, this.lobby.options.mode));
+    // A new game, a new seating plan. Tell everyone their seat before the first view.
+    this.reseat();
+    this.broadcastLobby();
+    this.host.replace(createGame(this.seatConfigs(), this.lobby.options.targetScore, this.lobby.options.mode));
   }
 
   updateSeat(index: number, kind: 'bot' | 'human') {
-    if (this.lobby.inGame || index <= 0 || index >= this.lobby.seats.length) return;
+    if (this.lobby.inGame || index === this.lobby.hostSeat || index < 0 || index >= this.lobby.seats.length) return;
     if (kind === 'bot') {
-      const persona = pickPersonas(1, this.lobby.seats.map((x) => x.avatar))[0];
+      const persona = pickPersonas(this.lobby.theme, 1, this.lobby.seats.map((x) => x.avatar))[0];
       this.lobby.seats[index] = {
         name: persona.name,
         avatar: persona.avatar,
@@ -455,23 +531,24 @@ export class HostSession implements Session {
     if (opts.playerCount && opts.playerCount !== this.lobby.seats.length) {
       const target = Math.max(2, Math.min(10, opts.playerCount));
       while (this.lobby.seats.length < target) {
-        const bot = pickPersonas(1, this.lobby.seats.map((x) => x.avatar))[0];
+        const bot = pickPersonas(this.lobby.theme, 1, this.lobby.seats.map((x) => x.avatar))[0];
         this.lobby.seats.push({ name: bot.name, avatar: bot.avatar, kind: 'bot' });
       }
       while (this.lobby.seats.length > target) {
         const lastIndex = this.lobby.seats.length - 1;
+        if (lastIndex === this.lobby.hostSeat) break;
         this.connections.get(lastIndex)?.close();
         this.connections.delete(lastIndex);
         this.lobby.seats.pop();
       }
-      this.lobby.options.playerCount = target;
+      this.lobby.options.playerCount = this.lobby.seats.length;
     }
     this.broadcastLobby();
   }
 
   sendAction(intent: Intent) {
     if (!this.host) return;
-    this.host.dispatch({ ...intent, player: 0 } as Action);
+    this.host.dispatch({ ...intent, player: this.lobby.hostSeat } as Action);
   }
 
   sendChat(text: string) {
@@ -481,12 +558,12 @@ export class HostSession implements Session {
       avatar: this.playerAvatar,
       text,
       time: Date.now(),
-      seat: 0,
+      seat: this.lobby.hostSeat,
     });
   }
 
   sendTaunt(id: string) {
-    this.taunt(0, id);
+    this.taunt(this.lobby.hostSeat, id);
   }
 
   /** Trash talk from a seat: only known lines, and not too often. */
@@ -501,7 +578,9 @@ export class HostSession implements Session {
 
   destroy() {
     this.destroyed = true;
+    this.unsubSettings();
     this.talker.stop();
+    this.voice.destroy();
     this.unsub?.();
     this.host?.destroy();
     for (const c of this.connections.values()) c.close();
@@ -518,6 +597,7 @@ export class ClientSession implements Session {
   private peer: Peer | null = null;
   private conn: DataConnection | null = null;
   private destroyed = false;
+  readonly voice = new VoiceChat((state) => this.conn?.open && this.conn.send({ type: 'voice', ...state } as ClientMessage));
 
   constructor(
     public roomId: string,
@@ -535,17 +615,12 @@ export class ClientSession implements Session {
       if (this.destroyed) return;
       this.peer = new Peer({
         debug: 1,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-          ],
-        },
+        config: { iceServers: iceServers() },
       });
 
       this.peer.on('open', () => {
         const hostPeerId = `nuno-${this.roomId.toLowerCase()}-host`;
+        this.voice.attach(this.peer!);
         this.conn = this.peer!.connect(hostPeerId, { reliable: true });
 
         this.conn.on('open', () => {
@@ -579,6 +654,8 @@ export class ClientSession implements Session {
         if (this.destroyed) return;
         console.warn('Client peer error:', err);
         if (err.type === 'peer-unavailable') {
+          // Once we're in, this is a voice link to someone who just left.
+          if (this.conn?.open) return;
           this.events.onError(`Room "${this.roomId}" not found. Check the room code or ask the host.`);
         } else {
           this.events.onError(err.message || 'Could not connect to multiplayer server');
@@ -594,6 +671,9 @@ export class ClientSession implements Session {
     switch (msg.type) {
       case 'lobby':
         this.mySeat = msg.yourSeat;
+        // The host picks the theme for everyone in the room.
+        setRoomTheme(msg.state.theme ?? null);
+        this.voice.setParticipants(participants(msg.state));
         this.events.onLobby(msg.state, msg.yourSeat);
         break;
       case 'view':
@@ -601,6 +681,9 @@ export class ClientSession implements Session {
         break;
       case 'chat':
         this.events.onChat(msg.message);
+        break;
+      case 'voice':
+        this.voice.setStates(msg.states);
         break;
       case 'error':
         this.events.onError(msg.message);
@@ -622,6 +705,8 @@ export class ClientSession implements Session {
 
   destroy() {
     this.destroyed = true;
+    this.voice.destroy();
+    setRoomTheme(null);
     this.conn?.close();
     this.peer?.destroy();
   }

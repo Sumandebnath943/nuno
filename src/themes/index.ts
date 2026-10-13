@@ -35,15 +35,15 @@ const BASE_VARS: Record<string, string> = {
   '--yellow': '#ffc21a',
   '--green': '#2eb34f',
   '--blue': '#2f72e0',
-  '--muted': '#6b6385',
+  '--muted': '#696182',
   '--soft': '#4d4566',
-  '--faint': '#9a93ad',
+  '--faint': '#757083',
   '--panel-2': '#efe6d2',
   '--panel-3': '#f1ebdd',
   '--line': '#e3d9c3',
   '--highlight': '#fff1a8',
   '--chip-hover': '#fff6d6',
-  '--link': '#6d4ce6',
+  '--link': '#6a4adf',
   '--accent-a': '#ffe066',
   '--accent-b': '#ffb703',
   '--surface': '#ffffff',
@@ -51,8 +51,11 @@ const BASE_VARS: Record<string, string> = {
   '--font-display': "'Lilita One', system-ui, sans-serif",
   '--font-card': "'Lilita One', system-ui, sans-serif",
   '--font-body': "'Fredoka', system-ui, sans-serif",
-  /** Buttons and panel text; themes with very wide display fonts use a narrower one here. */
+  /** Buttons, names and small labels; themes with very wide or ornate display fonts use a plainer one here. */
   '--font-ui': 'var(--font-display)',
+  /** Size multipliers for the display and UI fonts, so wide fonts don't overflow and narrow ones don't look tiny. */
+  '--dfs': '1',
+  '--ufs': '1',
   '--panel-bg': 'var(--cream)',
   '--room-bg':
     'radial-gradient(ellipse at 50% 45%, rgba(120, 90, 255, 0.28) 0%, rgba(0, 0, 0, 0) 60%), repeating-conic-gradient(from 0deg at 50% 45%, rgba(255, 255, 255, 0.035) 0deg 9deg, rgba(255, 255, 255, 0) 9deg 18deg), linear-gradient(180deg, #241d63 0%, #17143d 60%, #100d2b 100%)',
@@ -87,8 +90,8 @@ export function preloadThemeFonts() {
   THEME_ORDER.forEach((id) => loadFonts(THEMES[id].fonts));
 }
 
-/** Paints the whole app in a theme. */
-export function applyTheme(id: ThemeId) {
+/** Paints the whole app in a theme. A preview (theme gallery) leaves the music alone. */
+export function applyTheme(id: ThemeId, opts: { music?: boolean } = {}) {
   const t = THEMES[id] ?? classic;
   current = t;
   const root = document.documentElement;
@@ -99,7 +102,7 @@ export function applyTheme(id: ThemeId) {
   setSfxOverrides(t.sfx ?? {});
   fx.setAmbient(t.ambient);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', vars['--night']);
-  syncMusic();
+  if (opts.music !== false) syncMusic();
 }
 
 /** Plays the soundtrack the settings ask for. */

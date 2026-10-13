@@ -20,7 +20,7 @@ export function TargetPicker({ open, title, subtitle, players, me, myCount, onPi
   return (
     <Modal open={open} onClose={onCancel} className="max-w-md">
       <div className="p-5 sm:p-6">
-        <h2 className="font-display text-center text-3xl">{title}</h2>
+        <h2 className="font-display text-center text-2xl sm:text-3xl">{title}</h2>
         <p className="mt-1 text-center text-sm font-medium text-[var(--muted)]">{subtitle}</p>
         <div className="nice-scroll mt-4 grid max-h-[50dvh] gap-2 overflow-y-auto pr-1">
           {players.map((p, i) => {

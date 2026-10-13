@@ -161,7 +161,7 @@ export const mha: Theme = {
     '--red': '#e53935',
     '--muted': '#4a5a7a',
     '--soft': '#2d3a55',
-    '--faint': '#8a98b8',
+    '--faint': '#6a758e',
     '--panel-2': '#e8efff',
     '--panel-3': '#eef3ff',
     '--line': '#d0dbf2',
@@ -175,6 +175,9 @@ export const mha: Theme = {
     '--ring': 'rgba(255, 214, 0, 0.95)',
     '--font-display': "'Bangers', 'Lilita One', system-ui, sans-serif",
     '--font-card': "'Bangers', 'Lilita One', system-ui, sans-serif",
+    // Bangers is tall and narrow: a size up reads the same as everyone else.
+    '--dfs': '1.08',
+    '--ufs': '1.06',
     '--panel-bg':
       'radial-gradient(circle at 100% 0%, rgba(30,136,229,0.10) 0 1.5px, transparent 2px) 0 0 / 9px 9px, var(--cream)',
     '--room-bg':

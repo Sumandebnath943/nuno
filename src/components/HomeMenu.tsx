@@ -3,7 +3,7 @@ import type { Card, Difficulty, GameMode } from '../game/types';
 import { MODES } from '../game/modes';
 import { GUIDES } from '../lib/modeGuide';
 import { CardView } from './CardView';
-import { ModeButton, ModePicker } from './ModePicker';
+import { ModeBadge, ModeButton, ModePicker } from './ModePicker';
 import { AVATARS, Logo } from './ui';
 import { sfx, setMuted } from '../lib/sound';
 import { useSettings } from '../lib/settings';
@@ -11,6 +11,7 @@ import { useTheme } from '../themes';
 import { AmbientCanvas } from './ThemeStage';
 import { Avatar } from './Avatar';
 import { artFor, characterAvatar } from '../themes/characters';
+import type { SettingsTab } from './SettingsModal';
 
 interface Props {
   name: string;
@@ -20,7 +21,7 @@ interface Props {
   onCreateRoom: (playerCount: number, difficulty: Difficulty, targetScore: number, mode: GameMode) => void;
   onJoinRoom: (roomId: string) => void;
   onOpenRules: (mode: GameMode, focus?: 'rules' | 'cards') => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: SettingsTab) => void;
 }
 
 const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -71,6 +72,8 @@ export const HomeMenu: React.FC<Props> = ({
   onOpenSettings,
 }) => {
   const theme = useTheme();
+  const art = artFor(theme.id);
+  const characters = art.characters;
   const { muted } = useSettings();
   const [tab, setTab] = useState<'bots' | 'friends'>('bots');
   const [mode, setMode] = useState<GameMode>(() =>
@@ -106,26 +109,62 @@ export const HomeMenu: React.FC<Props> = ({
   const themeButton = (
     <button
       type="button"
-      onClick={() => (sfx.click(), onOpenSettings())}
-      className="group flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-2xl sm:h-11 border-[2.5px] border-[var(--ink)] px-2 text-left shadow-[0_3px_0_var(--ink)] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 short:h-10"
+      onClick={() => (sfx.click(), onOpenSettings('themes'))}
+      className="theme-button group relative flex h-11 w-full items-center gap-2.5 overflow-hidden rounded-2xl border-[2.5px] border-[var(--ink)] px-2 text-left shadow-[0_3px_0_var(--ink)] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 short:h-10"
       style={{ background: theme.vars['--room-bg'] ?? 'linear-gradient(90deg, #3b2f86, #17143d)' }}
       title="Pick a theme"
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] text-lg">
-        {theme.emoji}
+      {art.backdrop && <img src={art.backdrop.soft ?? art.backdrop.url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" draggable={false} />}
+      <span className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-black/10" aria-hidden="true" />
+      <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] text-lg">
+        {characters[0] ? <img src={characters[0].face} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} /> : theme.emoji}
       </span>
-      <span className="min-w-0 flex-1 truncate leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.6)' }}>
+      <span className="relative min-w-0 flex-1 truncate leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.7)' }}>
         <span className="font-display text-base">{theme.title}</span>
-        <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider opacity-85">{theme.id === 'classic' ? 'try an anime theme!' : 'theme'}</span>
+        <span className="font-body ml-1.5 text-[10.5px] font-bold uppercase tracking-wider">{theme.id === 'classic' ? 'try an anime theme!' : 'theme'}</span>
       </span>
-      <span className="chip shrink-0 px-2.5 py-0.5 text-sm group-hover:bg-[var(--chip-hover)]">🎨 Theme</span>
+      <span className="theme-shine pointer-events-none absolute inset-y-0 w-10" aria-hidden="true" />
+      <span className="chip relative shrink-0 px-2.5 py-0.5 text-sm group-hover:bg-[var(--chip-hover)]">🎨 Themes</span>
     </button>
   );
 
+  // Phones: mode and theme share a row as two compact tiles.
+  const phoneTiles = (
+    <div className="grid grid-cols-2 gap-2 sm:hidden">
+      <button
+        type="button"
+        onClick={() => (sfx.click(), setPicking(true))}
+        className="flex h-12 min-w-0 items-center gap-2 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[var(--surface)] px-2 text-left shadow-[0_3px_0_var(--ink)] active:translate-y-0.5"
+      >
+        <ModeBadge mode={mode} size={32} />
+        <span className="min-w-0 leading-tight">
+          <span className="font-ui block truncate text-[15px] text-[var(--ink)]">{MODES[mode].name}</span>
+          <span className="font-body block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Mode ▾</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => (sfx.click(), onOpenSettings('themes'))}
+        className="relative flex h-12 min-w-0 items-center gap-2 overflow-hidden rounded-2xl border-[2.5px] border-[var(--ink)] px-2 text-left shadow-[0_3px_0_var(--ink)] active:translate-y-0.5"
+        style={{ background: theme.vars['--room-bg'] ?? 'linear-gradient(90deg, #3b2f86, #17143d)' }}
+      >
+        {art.backdrop && <img src={art.backdrop.soft ?? art.backdrop.url} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
+        <span className="absolute inset-0 bg-gradient-to-r from-black/60 to-black/15" aria-hidden="true" />
+        <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] text-lg">
+          {characters[0] ? <img src={characters[0].face} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} /> : theme.emoji}
+        </span>
+        <span className="relative min-w-0 leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.75)' }}>
+          <span className="font-ui block truncate text-[15px]">{theme.title}</span>
+          <span className="font-body block text-[11px] font-bold uppercase tracking-wide">🎨 Themes</span>
+        </span>
+        <span className="theme-shine pointer-events-none absolute inset-y-0 w-10" aria-hidden="true" />
+      </button>
+    </div>
+  );
+
   const heroCards = GUIDES[mode].cards.slice(0, 5);
-  const art = artFor(theme.id);
-  const characters = art.characters;
   const free = useFreeSpots(FLOATERS.length, [theme.id, mode, tab, pickingAvatar]);
+  const heroTop = usePanelTop(free.root, free.blockers, [theme.id, tab, pickingAvatar]);
 
   return (
     <div ref={free.root} className="relative flex h-[100dvh] w-full flex-col overflow-hidden">
@@ -150,25 +189,42 @@ export const HomeMenu: React.FC<Props> = ({
         ))}
       </div>
 
+      {/* Phones: the theme's hero rises behind the logo, title-screen style, in the room above the panel. */}
+      {art.hero && heroTop !== null && heroTop > 150 && (
+        <div className="pointer-events-none absolute left-1/2 top-0 z-0 w-[min(100vw,460px)] -translate-x-1/2 sm:hidden" style={{ height: heroTop + 24 }} aria-hidden="true">
+          <img
+            src={art.hero.url}
+            alt=""
+            draggable={false}
+            className="idle-breathe h-full w-full select-none object-cover drop-shadow-[0_12px_16px_rgba(0,0,0,0.55)]"
+            style={{
+              objectPosition: '50% 8%',
+              WebkitMaskImage: 'linear-gradient(180deg, rgba(0,0,0,0) 0, #000 14%, #000 72%, rgba(0,0,0,0) 100%)',
+              maskImage: 'linear-gradient(180deg, rgba(0,0,0,0) 0, #000 14%, #000 72%, rgba(0,0,0,0) 100%)',
+            }}
+          />
+        </div>
+      )}
+
       {/* Top bar (moves into the hero column on short landscape screens) */}
       <header
         ref={(el) => (free.blockers.current[0] = el)}
-        className="safe-top relative z-10 flex items-center justify-end gap-2 p-3 phone:py-2 sm:p-4 land:hidden lowdesk:hidden"
+        className="safe-top relative z-20 flex items-center justify-end gap-2 p-3 phone:py-2 sm:p-4 land:hidden lowdesk:hidden"
       >
         <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={(focus) => onOpenRules(mode, focus)} onOpenSettings={onOpenSettings} />
       </header>
 
-      <main className="nice-scroll relative z-10 flex min-h-0 flex-1 overflow-y-auto">
-        <div className="m-auto flex w-full flex-col items-center gap-3 px-4 pb-4 short:gap-2 sm:gap-5 lg:flex-row lg:justify-center lg:gap-16 lg:pb-10 lowdesk:!py-3 land:flex-row land:justify-center land:gap-8 land:py-3">
+      <main className="nice-scroll relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="mx-auto flex w-full flex-1 flex-col items-center gap-3 px-4 pb-4 short:gap-2 sm:gap-5 lg:my-auto lg:flex-none lg:flex-row lg:justify-center lg:gap-16 lg:pb-10 lowdesk:!py-3 land:my-auto land:flex-none land:flex-row land:justify-center land:gap-8 land:py-3">
           {/* Hero */}
-          <section ref={(el) => (free.blockers.current[1] = el)} className="flex flex-col items-center">
+          <section ref={(el) => (free.blockers.current[1] = el)} className="flex min-h-0 w-full flex-1 flex-col items-center justify-end lg:w-auto lg:flex-none lg:justify-center land:w-auto land:flex-none land:justify-center">
             {/* The theme's hero art stands over the logo, title-screen style (desktop sizes). */}
             {art.hero && (
               <img
                 src={art.hero.url}
                 alt=""
                 draggable={false}
-                className="pointer-events-none hidden select-none object-contain drop-shadow-[0_14px_18px_rgba(0,0,0,0.55)] lg:block"
+                className="idle-breathe pointer-events-none hidden select-none object-contain drop-shadow-[0_14px_18px_rgba(0,0,0,0.55)] lg:block"
                 style={{ height: 'clamp(220px, calc(100dvh - 340px), 640px)', aspectRatio: `${art.hero.w} / ${art.hero.h}` }}
               />
             )}
@@ -225,7 +281,7 @@ export const HomeMenu: React.FC<Props> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => (sfx.click(), setPickingAvatar((v) => !v))}
-                className="chip flex h-12 w-12 shrink-0 items-center justify-center !rounded-2xl text-2xl short:h-10 short:w-10"
+                className="chip relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden !rounded-2xl text-2xl sm:h-12 sm:w-12 short:h-10 short:w-10"
                 aria-label="Choose avatar"
                 title="Choose avatar"
               >
@@ -293,10 +349,13 @@ export const HomeMenu: React.FC<Props> = ({
               </div>
             )}
 
-            {/* Game mode */}
-            <div className="mt-2.5 space-y-2 short:mt-2 land:hidden">
-              {modeButton}
-              {themeButton}
+            {/* Game mode and theme */}
+            <div className="mt-2.5 short:mt-2 land:hidden">
+              {phoneTiles}
+              <div className="hidden space-y-2 sm:block">
+                {modeButton}
+                {themeButton}
+              </div>
             </div>
 
             {/* Bots or friends */}
@@ -310,7 +369,7 @@ export const HomeMenu: React.FC<Props> = ({
                 <button
                   key={id}
                   onClick={() => (sfx.click(), setTab(id))}
-                  className={`font-display h-10 rounded-xl text-base transition-colors short:h-9 land:h-8 ${
+                  className={`font-display h-9 rounded-xl text-base transition-colors sm:h-10 short:h-9 land:h-8 ${
                     tab === id
                       ? 'border-2 border-[var(--ink)] bg-[var(--surface)] shadow-[0_2px_0_var(--ink)]'
                       : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -342,7 +401,7 @@ export const HomeMenu: React.FC<Props> = ({
                           setDifficulty(d.id);
                           remember('nuno.difficulty', d.id);
                         }}
-                        className={`chip h-10 text-[15px] short:h-9 land:h-8 ${difficulty === d.id ? 'is-on' : ''}`}
+                        className={`chip h-9 text-[15px] sm:h-10 short:h-9 land:h-8 ${difficulty === d.id ? 'is-on' : ''}`}
                       >
                         {d.icon} {d.label}
                       </button>
@@ -364,7 +423,7 @@ export const HomeMenu: React.FC<Props> = ({
                     sfx.deal();
                     onQuickPlay(playerCount, difficulty, target, mode);
                   }}
-                  className="btn btn-yellow mt-1 h-14 w-full text-2xl short:h-12 land:h-10 land:text-xl"
+                  className="btn btn-yellow mt-1 h-[52px] w-full text-2xl sm:h-14 short:h-12 land:h-10 land:text-xl"
                 >
                   PLAY!
                 </button>
@@ -445,7 +504,7 @@ function MenuButtons({
   muted: boolean;
   onToggleMute: () => void;
   onOpenRules: (focus?: 'rules' | 'cards') => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: SettingsTab) => void;
 }) {
   return (
     <>
@@ -460,7 +519,7 @@ function MenuButtons({
       <button className="icon-btn" onClick={onToggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
         {muted ? '🔇' : '🔊'}
       </button>
-      <button className="icon-btn" onClick={() => (sfx.click(), onOpenSettings())} aria-label="Settings" title="Theme, pace & sound">
+      <button className="icon-btn" onClick={() => (sfx.click(), onOpenSettings('sound'))} aria-label="Settings" title="Sound, pace & effects">
         ⚙️
       </button>
     </>
@@ -481,10 +540,10 @@ function FormatPicker({ format, official, onChange }: { format: Format; official
           <button
             key={f.id}
             onClick={() => (sfx.click(), onChange(f.id))}
-            className={`chip flex h-12 flex-col items-center justify-center leading-none short:h-9 land:h-8 ${format === f.id ? 'is-on' : ''}`}
+            className={`chip flex h-11 flex-col items-center justify-center leading-none sm:h-12 short:h-9 land:h-8 ${format === f.id ? 'is-on' : ''}`}
           >
             <span className="text-[15px]">{f.label}</span>
-            <span className="mt-1 font-body text-[11px] font-semibold opacity-60 short:hidden">{f.hint}</span>
+            <span className="mt-1 font-body text-[11px] font-semibold opacity-80 short:hidden">{f.hint}</span>
           </button>
         ))}
       </div>
@@ -506,7 +565,7 @@ function PlayerCountPicker({ value, onChange, hint }: { value: number; onChange:
           <button
             key={n}
             onClick={() => (sfx.click(), onChange(n))}
-            className={`chip h-10 text-lg short:h-9 land:h-8 ${value === n ? 'is-on' : ''}`}
+            className={`chip h-9 text-lg sm:h-10 short:h-9 land:h-8 ${value === n ? 'is-on' : ''}`}
             aria-pressed={value === n}
             aria-label={`${n} players`}
           >
@@ -552,4 +611,25 @@ function useFreeSpots(count: number, deps: unknown[]) {
   }, deps);
 
   return { root, items, blockers, ok };
+}
+
+/** Where the setup panel starts (px from the top), so the phone hero can fill the room above it. */
+function usePanelTop(root: React.RefObject<HTMLElement>, blockers: React.MutableRefObject<(HTMLElement | null)[]>, deps: unknown[]) {
+  const [top, setTop] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = root.current;
+    const panel = blockers.current[2];
+    if (!el || !panel) return;
+    const measure = () => {
+      const t = Math.round(panel.getBoundingClientRect().top - el.getBoundingClientRect().top);
+      setTop((prev) => (prev === t ? prev : t));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(panel);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return top;
 }

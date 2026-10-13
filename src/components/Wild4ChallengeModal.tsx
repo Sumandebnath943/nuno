@@ -43,7 +43,7 @@ export const Wild4ChallengeModal: React.FC<Props> = ({ open, context, offender, 
             <Avatar value={offender?.avatar} fill />
           </span>
         </div>
-        <h2 className="font-display text-3xl">
+        <h2 className="font-display text-2xl sm:text-3xl">
           {name} hit you with {copy.hit}!
         </h2>
         <p className="mt-2 font-medium text-[var(--soft)]">

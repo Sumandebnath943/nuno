@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { Card, Color, Face, Side } from '../../game/types';
 import { CARD_RATIO, CardView } from '../CardView';
-import { INK } from '../../lib/theme';
+import { INK, readableOn } from '../../lib/theme';
 import { useTheme } from '../../themes';
 import { pileJitter } from './layout';
 
@@ -71,7 +71,7 @@ export const Deck = forwardRef<HTMLDivElement, DeckProps>(function Deck(
                 ))}
             </div>
             <span
-              className="font-display absolute -bottom-2 -right-3 z-10 rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--surface)] px-2 text-sm leading-6 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]"
+              className={`font-ui absolute -bottom-2 -right-3 z-10 rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--surface)] text-[var(--ink)] shadow-[0_2px_0_var(--ink)] ${compact ? 'px-1.5 text-xs leading-5' : 'px-2 text-sm leading-6'}`}
               title="Cards left in the draw pile"
             >
               {count}
@@ -81,8 +81,10 @@ export const Deck = forwardRef<HTMLDivElement, DeckProps>(function Deck(
       </button>
       {label && (
         <span
-          className={`font-display mt-3 whitespace-nowrap rounded-full px-2.5 text-xs uppercase leading-5 tracking-wider ${
-            canDraw ? 'border-2 border-[var(--ink)] bg-[var(--yellow)] text-[var(--ink)]' : 'text-white/60'
+          className={`font-ui mt-3 whitespace-nowrap rounded-full border-2 uppercase tracking-wider ${compact ? 'px-2 text-[10px] leading-4' : 'px-2.5 text-xs leading-5'} ${
+            canDraw
+              ? 'border-[var(--ink)] bg-[var(--yellow)] text-[var(--ink)] shadow-[0_2px_0_var(--ink)]'
+              : 'border-transparent bg-[rgba(18,14,36,0.55)] text-white/90'
           }`}
         >
           {canDraw
@@ -177,6 +179,8 @@ export const Discard = forwardRef<HTMLDivElement, DiscardProps>(function Discard
   const visible = cards.filter((c) => !hidden.has(c.id));
   const compact = width < 80;
   const alias = color ? theme.colorAlias?.[color] : undefined;
+  const labelBg = color ? pal[color].base : '#6a55d9';
+  const labelInk = readableOn(labelBg);
   return (
     <div className="relative flex flex-col items-center" style={{ width }}>
       <div ref={ref} data-card-w={width} className="relative" style={{ width, height: h }}>
@@ -198,20 +202,23 @@ export const Discard = forwardRef<HTMLDivElement, DiscardProps>(function Discard
               className="absolute left-0 top-0"
               style={{ transform: `translate(${j.dx}px, ${j.dy}px) rotate(${j.rot}deg)` }}
             >
-              <CardView card={c} side={side} width={width} />
+              {/* Cards that land slam down and settle (they mount as they land). */}
+              <div className="animate-land">
+                <CardView card={c} side={side} width={width} />
+              </div>
             </div>
           );
         })}
       </div>
       {label &&
         (colorless ? (
-          <span className="font-display mt-3 whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] px-2.5 text-xs uppercase leading-5 tracking-wider text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
+          <span className={`font-ui mt-3 whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] uppercase tracking-wider text-[var(--ink)] shadow-[0_2px_0_var(--ink)] ${compact ? 'px-2 text-[10px] leading-4' : 'px-2.5 text-xs leading-5'}`}>
             {compact ? 'Any card' : 'Anything goes'}
           </span>
         ) : (
           <span
-            className="font-display mt-3 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2.5 text-xs uppercase leading-5 tracking-wider text-white shadow-[0_2px_0_var(--ink)] transition-colors duration-500"
-            style={{ background: color ? pal[color].base : '#6a55d9', textShadow: '0 1px 0 var(--ink)' }}
+            className={`font-ui mt-3 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-[var(--ink)] uppercase tracking-wider shadow-[0_2px_0_var(--ink)] transition-colors duration-500 ${compact ? 'px-2 text-[10px] leading-4' : 'px-2.5 text-xs leading-5'}`}
+            style={{ background: labelBg, color: labelInk.color, textShadow: labelInk.shadow }}
             title={alias}
           >
             {color ? (compact ? color : alias ? `${color} · ${alias}` : `${color} to play`) : compact ? '…' : 'Picking colour…'}

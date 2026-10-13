@@ -52,7 +52,7 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
           <Avatar value={winner.avatar} fill />
           <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-4xl animate-bob">👑</span>
         </div>
-        <h2 className="font-display mt-3 text-3xl sm:text-4xl">
+        <h2 className="font-display mt-3 text-2xl sm:text-4xl">
           {gameOver
             ? iWon
               ? 'You win the game!'

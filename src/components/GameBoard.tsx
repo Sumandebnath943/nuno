@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Card, Color, GameEvent, GameView, Intent } from '../game/types';
 import type { ChatMessage } from '../net/protocol';
+import type { VoiceChat } from '../net/voice';
 import { sortHand } from '../game/cards';
 import { canPlayCard } from '../game/engine';
 import { MODES, needsColor, needsTarget } from '../game/modes';
@@ -15,14 +16,14 @@ import { computeLayout } from './board/layout';
 import { useTableFx, type Anchors } from './board/useTableFx';
 import { FlightLayer } from './board/FlightLayer';
 import { Table } from './board/Table';
-import { Seat } from './board/Seat';
+import { Seat, type SeatVoice } from './board/Seat';
 import { Deck, Discard } from './board/Piles';
 import { Hand } from './board/Hand';
 import { TargetPicker } from './board/TargetPicker';
 import { SpinWheel } from './board/SpinWheel';
 import { WheelPickModal } from './board/WheelPickModal';
 import { RevealOverlay } from './board/RevealOverlay';
-import { CutIn } from './board/CutIn';
+import { CutIn, cutInBox } from './board/CutIn';
 import { avatarImage, preload } from '../themes/characters';
 import {
   EventLog,
@@ -36,6 +37,7 @@ import {
   turnHint,
   type FloatingTaunt,
 } from './board/Controls';
+import { MicButton, SpeakerButton, useVoice } from './VoiceControls';
 import { fxSounds, sfx, setMuted } from '../lib/sound';
 import { useIsTouch, useSafeArea } from '../lib/device';
 import { useSettings } from '../lib/settings';
@@ -52,13 +54,16 @@ interface Props {
   isHost: boolean;
   roomId?: string;
   chatMessages: ChatMessage[];
+  /** Online rooms: voice chat, and each seat's peer id so it can show who's talking. */
+  voice?: VoiceChat;
+  seatPeers?: (string | undefined)[];
   onAction: (intent: Intent) => void;
   onTaunt: (id: string) => void;
   onLeave: () => void;
   onNextRound: () => void;
   onNewGame: () => void;
   onOpenRules: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (tab?: 'themes' | 'sound' | 'game') => void;
 }
 
 type ChallengeEvent = Extract<GameEvent, { type: 'challenge' }>;
@@ -78,6 +83,8 @@ export const GameBoard: React.FC<Props> = ({
   isHost,
   roomId,
   chatMessages,
+  voice,
+  seatPeers,
   onAction,
   onTaunt,
   onLeave,
@@ -92,6 +99,7 @@ export const GameBoard: React.FC<Props> = ({
   const size = useViewportSize(rootRef);
   const safe = useSafeArea();
   const touch = useIsTouch();
+  const voiceSnap = useVoice(voice);
   const n = view.players.length;
   const me = view.players[view.me];
   const L = computeLayout(size.w, size.h, n - 1, safe);
@@ -129,6 +137,7 @@ export const GameBoard: React.FC<Props> = ({
   const muted = settings.muted;
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pileHelp, setPileHelp] = useState(false);
   const [floating, setFloating] = useState<FloatingTaunt[]>([]);
   const [challengeResult, setChallengeResult] = useState<ChallengeEvent | null>(null);
@@ -218,7 +227,7 @@ export const GameBoard: React.FC<Props> = ({
       if (!settings.muted) fxSounds[taunt.sound]?.();
       const spot = tauntSpot.current(m.seat);
       const key = m.id;
-      setFloating((list) => [...list.slice(-5), { key, x: spot.x, y: spot.y, text: taunt.text, avatar: m.avatar }]);
+      setFloating((list) => [...list.slice(-3), { key, x: spot.x, y: spot.y, text: taunt.text, avatar: m.avatar }]);
       setTimeout(() => setFloating((list) => list.filter((x) => x.key !== key)), 3500);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -262,6 +271,10 @@ export const GameBoard: React.FC<Props> = ({
     }
     playCard(card);
   };
+  // The hand keeps one handler; it always calls the latest one.
+  const cardClick = useRef(handleCardClick);
+  cardClick.current = handleCardClick;
+  const onPlay = useCallback((card: Card) => cardClick.current(card), []);
 
   const handleColor = (color: Color) => {
     if (pending?.needs === 'color') {
@@ -323,6 +336,30 @@ export const GameBoard: React.FC<Props> = ({
     setTimeout(() => setCopied(false), 1800);
   };
 
+  // ── voice ────────────────────────────────────────────────
+  // One object per seat, rebuilt only when someone's voice changes (seats are memoised).
+  const seatVoices = useMemo(
+    () =>
+      view.players.map((_, seat): SeatVoice | undefined => {
+        const peer = seatPeers?.[seat];
+        if (!voiceSnap || !peer) return undefined;
+        const st = voiceSnap.states[peer];
+        return { mic: !!st?.mic, speaking: !!st?.speaking, muted: !!voiceSnap.muted[peer] };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [voiceSnap, seatPeers?.join('|'), view.players.length],
+  );
+  const toggleSeatMute = useCallback(
+    (seat: number) => {
+      const peer = seatPeers?.[seat];
+      if (peer && voice) {
+        sfx.click();
+        voice.toggleMute(peer);
+      }
+    },
+    [seatPeers, voice],
+  );
+
   // ── modals ───────────────────────────────────────────────
   const choosingColor =
     (view.phase === 'chooseColor' && view.chooser === view.me) ||
@@ -358,21 +395,40 @@ export const GameBoard: React.FC<Props> = ({
   const myCount = view.myHand.length;
   const hint = myMove ? turnHint(view, playable.size) : '';
   const ticker = L.roomForTicker ? eventLine(view) : null;
-  const nunoSize = L.mobile ? 60 : L.short ? 64 : 92;
+  const nunoSize = L.mobile ? 58 : L.short ? 64 : 92;
   const dimOthers = myTurn && !anyModal;
-  const btn = L.mobile ? 'h-11 px-3.5 text-base' : 'h-12 px-5 text-lg';
+  const btn = L.mobile ? 'h-10 px-3 text-[15px]' : 'h-12 px-5 text-lg';
   const dark = view.side === 'dark';
+  const online = !!roomId;
   const rankOf = (count: number, score: number) => theme.rank?.(count, score);
   const auraOf = (seat: number, count: number) =>
     [view.actor === seat && !roundDone ? theme.auraClass : '', count === 1 && !roundDone ? theme.hotClass : ''].filter(Boolean).join(' ');
   const topCard = view.discardTop[view.discardTop.length - 1];
   const topHelp = topCard ? cardHelp(mode, topCard) : null;
 
+  // Big splash words sit over the piles. With a character cut-in on a phone,
+  // they move into the free space beside the character so the two never overlap.
+  const splashY = cy - pileH * 0.15;
+  let splashX = cx;
+  let splashMaxW = Math.min(L.W - 24, 760);
+  if (fx.cutIn) {
+    const box = cutInBox(fx.cutIn, splashY, L.W, L.H, L.topBar);
+    if (L.mobile) {
+      splashX = box.freeX + box.freeW / 2;
+      splashMaxW = box.freeW - 6;
+    } else {
+      const clear = fx.cutIn.side === 'left' ? cx - (box.x + box.w) : box.x - cx;
+      splashMaxW = Math.max(220, Math.min(splashMaxW, 2 * clear - 24));
+    }
+  }
+  const splashSize = L.mobile ? 62 : L.short ? 68 : 96;
+
   // Where a taunt floats up from: above an opponent's seat, or above your hand.
   tauntSpot.current = (seat: number) => {
-    // Keep the bubble (up to ~260px wide) on screen.
-    const clampX = (x: number) => Math.min(L.W - 135, Math.max(135, x));
-    if (seat === view.me) return { x: clampX(L.mobile ? 120 : cx), y: L.H - L.handBottom - L.cw * CARD_RATIO - (L.mobile ? 70 : 30) };
+    // Keep the bubble on screen.
+    const margin = L.mobile ? 100 : 140;
+    const clampX = (x: number) => Math.min(L.W - margin, Math.max(margin, x));
+    if (seat === view.me) return { x: clampX(L.mobile ? 110 : cx), y: L.H - L.handBottom - L.cw * CARD_RATIO - (L.mobile ? 66 : 30) };
     const k = (seat - view.me - 1 + n) % n;
     const spot = L.seats[k] ?? { x: cx, y: cy };
     return { x: clampX(spot.x), y: spot.y - (L.compactSeats ? 34 : 50) };
@@ -398,12 +454,9 @@ export const GameBoard: React.FC<Props> = ({
   const actionButtons = !roundDone && (
     <>
       {canDraw && (
-        <button
-          onClick={draw}
-          className={`btn ${launching || view.stack ? 'btn-red' : 'btn-blue'} ${btn} ${launching ? 'animate-buzz' : ''}`}
-        >
+        <button onClick={draw} className={`btn ${launching || view.stack ? 'btn-red' : 'btn-blue'} ${btn} ${launching ? 'animate-buzz' : ''}`}>
           {drawLabel}
-          {!L.mobile && <kbd className="ml-2 rounded-md bg-white/25 px-1.5 text-xs">D</kbd>}
+          {!L.mobile && <kbd className="font-body ml-2 rounded-md bg-white/25 px-1.5 text-xs">D</kbd>}
         </button>
       )}
       {myTurn && view.phase === 'drawn' && (
@@ -414,7 +467,7 @@ export const GameBoard: React.FC<Props> = ({
           {!view.drawnMustPlay && (
             <button onClick={keep} className={`btn btn-white ${btn}`}>
               Keep
-              {!L.mobile && <kbd className="ml-2 rounded-md bg-black/10 px-1.5 text-xs">K</kbd>}
+              {!L.mobile && <kbd className="font-body ml-2 rounded-md bg-black/10 px-1.5 text-xs">K</kbd>}
             </button>
           )}
         </>
@@ -433,6 +486,21 @@ export const GameBoard: React.FC<Props> = ({
       ? 'Name a colour. You’ll flip cards until it shows up — and keep them all.'
       : 'The next player has to match it. Numbers show how many you hold.';
 
+  const statusPill = !L.roomForBanner && !roundDone && (
+    <div
+      className="font-ui absolute bottom-1.5 left-1/2 hidden max-w-[40vw] -translate-x-1/2 items-center gap-1.5 truncate whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-3 text-sm leading-7 shadow-[0_2px_0_var(--ink)] sm:flex"
+      style={{ background: myMove ? 'var(--yellow)' : 'var(--surface)', color: 'var(--ink)' }}
+    >
+      {myMove ? (
+        `Your ${myTurn ? 'turn' : 'move'}!${L.W >= 1000 ? ` ${hint}` : ''}`
+      ) : (
+        <>
+          <Avatar value={view.players[view.actor ?? view.current]?.avatar} /> {view.players[view.actor ?? view.current]?.name}…
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div ref={rootRef} className="relative h-[100dvh] w-full select-none overflow-hidden">
       {/* Flip's Dark Side: the whole room goes dark. */}
@@ -441,35 +509,23 @@ export const GameBoard: React.FC<Props> = ({
         style={{ opacity: dark ? 1 : 0, background: 'radial-gradient(ellipse at 50% 45%, rgba(42,33,66,0.75), rgba(13,11,22,0.95) 75%)' }}
       />
       <AmbientCanvas className="z-[12]" />
-      <Table
-        cx={cx}
-        cy={cy}
-        rx={L.table.rx}
-        ry={L.table.ry}
-        color={fx.fxColor}
-        direction={view.direction}
-        rainbow={mode === 'allwild'}
-        dark={dark}
-      />
+      <Table cx={cx} cy={cy} rx={L.table.rx} ry={L.table.ry} color={fx.fxColor} direction={view.direction} rainbow={mode === 'allwild'} dark={dark} />
 
       {/* ── top bar ── */}
-      <header
-        className="absolute inset-x-0 top-0 z-40 flex items-end justify-between gap-2 px-2 pb-1.5 sm:px-4"
-        style={{ height: L.topBar }}
-      >
+      <header className="absolute inset-x-0 top-0 z-40 flex items-end justify-between gap-2 px-2 pb-1.5 sm:px-4" style={{ height: L.topBar }}>
         <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
           <Logo animated={false} className="hidden w-[86px] shrink-0 lg:block" />
           <button onClick={onOpenRules} className="flex shrink-0 items-center gap-1.5" title={`NUNO ${info.name} — how to play`}>
             <ModeBadge mode={mode} size={L.mobile ? 30 : 34} />
-            <span className="font-display hidden whitespace-nowrap text-base text-white drop-shadow md:inline">{info.name}</span>
+            <span className="font-ui hidden whitespace-nowrap text-base text-white drop-shadow-[0_2px_0_rgba(0,0,0,0.6)] md:inline">{info.name}</span>
           </button>
-          <span className="font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
+          <span className="font-ui whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
             R{view.round}
             <span className="hidden text-[var(--muted)] sm:inline"> · {view.targetScore ? `to ${view.targetScore}` : '1 round'}</span>
           </span>
           {mode === 'flip' && (
             <span
-              className={`font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2.5 text-sm leading-7 shadow-[0_2px_0_var(--ink)] transition-colors ${
+              className={`font-ui whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2 text-sm leading-7 shadow-[0_2px_0_var(--ink)] transition-colors ${
                 dark ? 'bg-[#141019] text-white' : 'bg-[var(--surface)] text-[var(--ink)]'
               }`}
             >
@@ -480,7 +536,7 @@ export const GameBoard: React.FC<Props> = ({
           {roomId && (
             <button
               onClick={copyInvite}
-              className="font-display hidden whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--highlight)] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)] sm:block"
+              className="font-ui hidden whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--highlight)] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)] sm:block"
               title="Copy invite link"
             >
               {copied ? 'Link copied!' : `Room ${roomId}`}
@@ -488,56 +544,86 @@ export const GameBoard: React.FC<Props> = ({
           )}
         </div>
 
-        {!L.roomForBanner && !roundDone && (
-          <div
-            className="font-display absolute bottom-1.5 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-3 text-sm leading-7 shadow-[0_2px_0_var(--ink)] sm:block"
-            style={{ background: myMove ? 'var(--yellow)' : 'var(--surface)', color: 'var(--ink)' }}
-          >
-            {myMove
-              ? `Your ${myTurn ? 'turn' : 'move'}!${L.W >= 1000 ? ` ${hint}` : ''}`
-              : (
-                <>
-                  <Avatar value={view.players[view.actor ?? view.current]?.avatar} /> {view.players[view.actor ?? view.current]?.name}…
-                </>
-              )}
+        {statusPill}
+
+        {L.mobile ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {online && voice && voiceSnap && (
+              <>
+                <MicButton voice={voice} snap={voiceSnap} compact />
+                <SpeakerButton compact />
+              </>
+            )}
+            <button
+              onClick={() => setLogOpen((v) => !v)}
+              className={`icon-btn !h-9 !min-w-9 !px-0 ${logOpen ? 'is-on' : ''}`}
+              aria-label="What just happened"
+              data-log-toggle
+            >
+              📜
+            </button>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className={`icon-btn !h-9 !min-w-9 !px-0 text-lg ${menuOpen ? 'is-on' : ''}`}
+              aria-label="Menu"
+              aria-expanded={menuOpen}
+              data-menu-toggle
+            >
+              ☰
+            </button>
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {online && voice && voiceSnap && (
+              <>
+                <MicButton voice={voice} snap={voiceSnap} />
+                <SpeakerButton />
+              </>
+            )}
+            <button onClick={toggleSort} className={`icon-btn ${sorted ? 'is-on' : ''}`} title="Sort my cards by colour (S)" aria-pressed={sorted}>
+              <span aria-hidden>🗂️</span>
+              <span className="hidden md:inline">Sort</span>
+            </button>
+            <button
+              onClick={() => setLogOpen((v) => !v)}
+              className={`icon-btn ${logOpen ? 'is-on' : ''}`}
+              aria-label="What just happened"
+              title="What just happened"
+              data-log-toggle
+            >
+              <span aria-hidden>📜</span>
+              <span className="hidden lg:inline">Log</span>
+            </button>
+            <button onClick={toggleMute} className="icon-btn" aria-label={muted ? 'Unmute' : 'Mute'}>
+              {muted ? '🔇' : '🔊'}
+            </button>
+            <button onClick={() => onOpenSettings()} className="icon-btn" aria-label="Settings" title="Theme, pace & sound">
+              <span aria-hidden>⚙️</span>
+            </button>
+            <button onClick={onOpenRules} className="icon-btn" aria-label="How to play" title="How to play">
+              ?
+            </button>
+            <button onClick={() => setConfirmLeave(true)} className="icon-btn" aria-label="Leave game" title="Leave game">
+              <span aria-hidden>🚪</span>
+              <span className="hidden md:inline">Leave</span>
+            </button>
           </div>
         )}
-
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <button
-            onClick={toggleSort}
-            className={`icon-btn ${sorted ? 'is-on' : ''}`}
-            title="Sort my cards by colour (S)"
-            aria-pressed={sorted}
-          >
-            <span aria-hidden>🗂️</span>
-            <span className="hidden md:inline">Sort</span>
-          </button>
-          <button
-            onClick={() => setLogOpen((v) => !v)}
-            className={`icon-btn ${logOpen ? 'is-on' : ''}`}
-            aria-label="What just happened"
-            title="What just happened"
-            data-log-toggle
-          >
-            <span aria-hidden>📜</span>
-            <span className="hidden lg:inline">Log</span>
-          </button>
-          <button onClick={toggleMute} className="icon-btn" aria-label={muted ? 'Unmute' : 'Mute'}>
-            {muted ? '🔇' : '🔊'}
-          </button>
-          <button onClick={onOpenSettings} className="icon-btn" aria-label="Settings" title="Theme, pace & sound">
-            <span aria-hidden>⚙️</span>
-          </button>
-          <button onClick={onOpenRules} className="icon-btn hide-on-phone" aria-label="How to play" title="How to play">
-            ?
-          </button>
-          <button onClick={() => setConfirmLeave(true)} className="icon-btn" aria-label="Leave game" title="Leave game">
-            <span aria-hidden>🚪</span>
-            <span className="hidden md:inline">Leave</span>
-          </button>
-        </div>
         {logOpen && <EventLog view={view} onClose={() => setLogOpen(false)} />}
+        {menuOpen && (
+          <GameMenu
+            onClose={() => setMenuOpen(false)}
+            items={[
+              { icon: '🗂️', label: sorted ? 'Sorted by colour' : 'Sort my cards', on: sorted, action: toggleSort, keep: true },
+              { icon: muted ? '🔇' : '🔊', label: muted ? 'Sound off' : 'Sound on', on: !muted, action: toggleMute, keep: true },
+              { icon: '🎨', label: 'Themes', action: () => onOpenSettings('themes') },
+              { icon: '⚙️', label: 'Settings', action: () => onOpenSettings('sound') },
+              { icon: '📖', label: 'How to play', action: onOpenRules },
+              ...(roomId ? [{ icon: '🔗', label: copied ? 'Link copied!' : `Invite · ${roomId}`, action: copyInvite, keep: true }] : []),
+              { icon: '🚪', label: 'Leave game', action: () => setConfirmLeave(true), danger: true },
+            ]}
+          />
+        )}
       </header>
 
       {/* ── opponents around the table ── */}
@@ -554,7 +640,7 @@ export const GameBoard: React.FC<Props> = ({
             x={spot.x}
             y={spot.y}
             compact={L.compactSeats}
-            nameMax={L.mobile ? 80 : L.compactSeats ? 118 : 132}
+            nameMax={L.nameMax}
             isTurn={!roundDone && view.actor === seat}
             isNext={!roundDone && nextSeat === seat && view.phase === 'play' && view.actor !== seat}
             catchable={view.unoVulnerable === seat && !roundDone}
@@ -562,25 +648,24 @@ export const GameBoard: React.FC<Props> = ({
             bubble={fx.bubbles[seat]}
             mercy={mode === 'nomercy'}
             side={view.side}
-            bubbleAlign={spot.x < 90 ? 'left' : spot.x > L.W - 90 ? 'right' : 'center'}
+            bubbleAlign={spot.x < 100 ? 'left' : spot.x > L.W - 100 ? 'right' : 'center'}
             rank={rankOf(p.handCount, p.score)}
             aura={auraOf(seat, p.handCount)}
+            voice={seatVoices[seat]}
             registerFan={registerFan}
             onCatch={catchPlayer}
+            onToggleMute={toggleSeatMute}
           />
         );
       })}
 
       {/* ── status above the piles ── */}
       {L.roomForBanner && (
-        <StatusBanner view={view} hint={hint} x={cx} y={cy - pileH / 2 - (L.mobile ? 78 : 92)} compact={L.mobile} hidden={!!fx.splash} />
+        <StatusBanner view={view} hint={hint} x={cx} y={cy - pileH / 2 - (L.mobile ? 70 : 92)} compact={L.mobile} hidden={!!fx.splash || !!fx.cutIn} />
       )}
 
       {/* ── draw & discard piles ── */}
-      <div
-        className="absolute z-20 flex items-start"
-        style={{ left: cx, top: cy - pileH / 2, transform: 'translateX(-50%)', gap: L.pileW * 0.5 }}
-      >
+      <div className="absolute z-20 flex items-start" style={{ left: cx, top: cy - pileH / 2, transform: 'translateX(-50%)', gap: L.pileW * 0.5 }}>
         <Deck
           ref={deckRef}
           width={L.pileW}
@@ -601,8 +686,8 @@ export const GameBoard: React.FC<Props> = ({
           title={topHelp ? `${topHelp.name}: ${topHelp.text}` : undefined}
         >
           {pileHelp && topHelp && (
-            <span className="absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)] animate-popIn">
-              <b className="font-display text-xs text-[var(--ink)]">{topHelp.name}</b>
+            <span className="font-body absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11.5px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)] animate-popIn">
+              <b className="font-ui text-xs text-[var(--ink)]">{topHelp.name}</b>
               <br />
               {topHelp.text}
             </span>
@@ -620,7 +705,9 @@ export const GameBoard: React.FC<Props> = ({
           {view.stack && (
             <span
               key={view.stack.total}
-              className="font-display absolute -right-5 -top-5 z-10 flex h-12 min-w-12 items-center justify-center rounded-full border-[3px] border-[var(--ink)] bg-[var(--red)] px-2 text-xl text-white shadow-[0_3px_0_var(--ink)] animate-popIn"
+              className={`font-display absolute -right-5 -top-5 z-10 flex items-center justify-center rounded-full border-[3px] border-[var(--ink)] bg-[var(--red)] px-2 text-white shadow-[0_3px_0_var(--ink)] animate-popIn ${
+                L.mobile ? 'h-10 min-w-10 text-base' : 'h-12 min-w-12 text-xl'
+              }`}
               title="Cards stacked so far"
             >
               +{view.stack.total}
@@ -630,10 +717,12 @@ export const GameBoard: React.FC<Props> = ({
       </div>
 
       {ticker && (
-        <div className="pointer-events-none absolute z-20 -translate-x-1/2" style={{ left: cx, top: cy + pileH / 2 + 48 }}>
+        <div className="pointer-events-none absolute z-20 -translate-x-1/2" style={{ left: cx, top: cy + pileH / 2 + (L.mobile ? 40 : 48) }}>
           <span
             key={ticker}
-            className="font-display block max-w-[90vw] truncate whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.55)] px-3 py-0.5 text-sm text-white/90 animate-fadeIn"
+            className={`font-ui block max-w-[86vw] truncate whitespace-nowrap rounded-full bg-[rgba(18,14,36,0.62)] text-white animate-fadeIn ${
+              L.mobile ? 'px-2.5 py-px text-[11.5px]' : 'px-3 py-0.5 text-sm'
+            }`}
           >
             {ticker}
           </span>
@@ -655,13 +744,17 @@ export const GameBoard: React.FC<Props> = ({
         side={view.side}
         touch={touch}
         registerCard={registerCard}
-        onPlay={handleCardClick}
+        onPlay={onPlay}
         describe={describe}
       />
 
       {me.out && !roundDone && (
-        <div className="pointer-events-none absolute inset-x-0 z-[36] flex justify-center" style={{ bottom: L.handBottom + 20 }}>
-          <span className="font-display rounded-2xl border-[3px] border-[var(--ink)] bg-[#ffe1e1] px-4 py-2 text-lg text-[#b3141c] shadow-[0_4px_0_var(--ink)]">
+        <div className="pointer-events-none absolute inset-x-0 z-[36] flex justify-center px-3" style={{ bottom: L.handBottom + 20 }}>
+          <span
+            className={`font-ui rounded-2xl border-[3px] border-[var(--ink)] bg-[#ffe1e1] text-center text-[#a3121a] shadow-[0_4px_0_var(--ink)] ${
+              L.mobile ? 'px-3 py-1.5 text-sm' : 'px-4 py-2 text-lg'
+            }`}
+          >
             💀 You’re out this round — watch the carnage
           </span>
         </div>
@@ -670,7 +763,7 @@ export const GameBoard: React.FC<Props> = ({
       {/* ── NUNO Spin race ── */}
       {racing && (
         <div className="absolute inset-x-0 z-[46] flex justify-center" style={{ top: cy + pileH / 2 + (L.mobile ? 20 : 34) }}>
-          <button onClick={() => onAction({ type: 'unoSpin' })} className="btn btn-yellow animate-buzz h-16 px-8 text-2xl">
+          <button onClick={() => onAction({ type: 'unoSpin' })} className={`btn btn-yellow animate-buzz ${L.mobile ? 'h-14 px-6 text-xl' : 'h-16 px-8 text-2xl'}`}>
             ⚡ NUNO SPIN!
           </button>
         </div>
@@ -678,10 +771,7 @@ export const GameBoard: React.FC<Props> = ({
 
       {/* ── your controls ── */}
       {L.mobile ? (
-        <div
-          className="absolute inset-x-0 z-[35] flex items-end justify-between gap-2 px-2"
-          style={{ bottom: L.handBottom + L.cw * CARD_RATIO + 10 }}
-        >
+        <div className="absolute inset-x-0 z-[35] flex items-end justify-between gap-1.5 px-2" style={{ bottom: L.handBottom + L.cw * CARD_RATIO + 10 }}>
           <MyPlate
             me={me}
             count={myCount}
@@ -692,6 +782,7 @@ export const GameBoard: React.FC<Props> = ({
             onTaunt={onTaunt}
             mercy={mode === 'nomercy'}
             aura={auraOf(view.me, myCount)}
+            speaking={!!voiceSnap?.speaking}
           />
           <div className="flex gap-1.5">{actionButtons}</div>
           <NunoButton state={nuno} size={nunoSize} onPress={shout} compact />
@@ -710,13 +801,11 @@ export const GameBoard: React.FC<Props> = ({
               mercy={mode === 'nomercy'}
               rank={rankOf(myCount, me.score)}
               aura={auraOf(view.me, myCount)}
+              speaking={!!voiceSnap?.speaking}
             />
           </div>
           {/* Short screens stack the buttons above the buzzer so they don't run into the hand. */}
-          <div
-            className={`absolute z-[35] flex ${L.short ? 'flex-col items-end gap-2' : 'items-end gap-3'}`}
-            style={{ right: 16, bottom: 14 + safe.bottom }}
-          >
+          <div className={`absolute z-[35] flex ${L.short ? 'flex-col items-end gap-2' : 'items-end gap-3'}`} style={{ right: 16, bottom: 14 + safe.bottom }}>
             <div className={`flex items-end gap-2 ${L.short ? '' : 'flex-col pb-6'}`}>{actionButtons}</div>
             <NunoButton state={nuno} size={nunoSize} onPress={shout} compact={L.short} />
           </div>
@@ -734,11 +823,11 @@ export const GameBoard: React.FC<Props> = ({
         onSpin={() => onAction({ type: 'spin' })}
       />
       <RevealOverlay reveal={fx.reveal} players={view.players} me={view.me} x={cx} y={cy} />
-      <CutIn cut={fx.cutIn} y={cy - pileH * 0.15} W={L.W} H={L.H} top={L.topBar} />
-      <SplashText splash={fx.splash} x={cx} y={cy - pileH * 0.15} scale={L.mobile ? 0.62 : L.short ? 0.7 : 1} />
+      <CutIn cut={fx.cutIn} y={splashY} W={L.W} H={L.H} top={L.topBar} />
+      <SplashText splash={fx.splash} x={splashX} y={splashY} maxWidth={splashMaxW} size={splashSize} compact={L.mobile} />
       <FlightLayer flights={fx.flights} onLand={fx.land} />
       <FxCanvas className="z-[46]" />
-      <TauntLayer taunts={floating} />
+      <TauntLayer taunts={floating} compact={L.mobile} />
 
       {/* ── modals ── */}
       <ColorPickerModal
@@ -785,23 +874,15 @@ export const GameBoard: React.FC<Props> = ({
       )}
 
       {challengeResult && !roundDone && (
-        <ChallengeResultModal
-          open
-          result={challengeResult}
-          me={view.me}
-          players={view.players}
-          onClose={() => setChallengeResult(null)}
-        />
+        <ChallengeResultModal open result={challengeResult} me={view.me} players={view.players} onClose={() => setChallengeResult(null)} />
       )}
 
-      {fx.settled && (
-        <RoundOverModal view={view} isHost={isHost} onNextRound={onNextRound} onNewGame={onNewGame} onLeave={onLeave} />
-      )}
+      {fx.settled && <RoundOverModal view={view} isHost={isHost} onNextRound={onNextRound} onNewGame={onNewGame} onLeave={onLeave} />}
 
       <Modal open={confirmLeave} onClose={() => setConfirmLeave(false)} className="max-w-sm">
         <div className="p-6 text-center">
           <div className="text-5xl">🚪</div>
-          <h2 className="font-display mt-2 text-3xl">Leave the game?</h2>
+          <h2 className="font-display mt-2 text-2xl sm:text-3xl">Leave the game?</h2>
           <p className="mt-1 font-medium text-[var(--muted)]">
             {roomId && isHost ? 'You are the host — the room closes for everyone.' : 'Your progress in this game will be lost.'}
           </p>
@@ -818,6 +899,53 @@ export const GameBoard: React.FC<Props> = ({
     </div>
   );
 };
+
+interface MenuItem {
+  icon: string;
+  label: string;
+  action: () => void;
+  /** A switch: stays open after a tap. */
+  keep?: boolean;
+  on?: boolean;
+  danger?: boolean;
+}
+
+/** The phone's ☰ menu: everything that doesn't need to be one tap away. */
+function GameMenu({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as HTMLElement).closest('[data-menu-toggle]')) onClose();
+    };
+    window.addEventListener('pointerdown', away);
+    return () => window.removeEventListener('pointerdown', away);
+  }, [onClose]);
+  return (
+    <div ref={ref} className="panel absolute right-2 top-full z-50 mt-2 w-[min(calc(100vw-16px),250px)] !rounded-2xl p-1.5 animate-popIn" role="menu">
+      {items.map((it) => (
+        <button
+          key={it.label}
+          role="menuitem"
+          onClick={() => {
+            it.action();
+            if (!it.keep) onClose();
+          }}
+          className={`font-ui flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[15px] transition-colors active:bg-[var(--highlight)] ${
+            it.danger ? 'text-[#b3141c]' : 'text-[var(--ink)]'
+          }`}
+        >
+          <span className="w-6 text-center text-lg leading-none">{it.icon}</span>
+          <span className="flex-1">{it.label}</span>
+          {it.on !== undefined && (
+            <span className={`relative h-5 w-9 rounded-full border-2 border-[var(--ink)] ${it.on ? 'bg-[var(--green)]' : 'bg-[var(--panel-2)]'}`}>
+              <span className="absolute top-px h-3 w-3 rounded-full border-2 border-[var(--ink)] bg-white transition-all" style={{ left: it.on ? 17 : 1 }} />
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function useViewportSize(ref: React.RefObject<HTMLElement>) {
   const [size, setSize] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
