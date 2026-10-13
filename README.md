@@ -57,7 +57,17 @@ Tap **Talk** on your name plate to fling a ready-made line at the table — it f
 
 In online rooms everyone can talk while they play. Tap 🎙️ to turn your mic on (it's off until you do) and 🎧 to stop hearing the others. Whoever is talking gets a green ring around their picture; tap the mic badge on someone's seat to mute just them. Voice links run straight between players (WebRTC), like the game itself.
 
-Phones on mobile data often sit behind carrier NAT, where direct links (game and voice) can fail. Adding a TURN relay fixes that: set `VITE_TURN_URLS` (comma-separated `turn:` URLs), `VITE_TURN_USERNAME` and `VITE_TURN_CREDENTIAL` in your environment (for example in Vercel's project settings) and rebuild.
+### Playing on mobile data (TURN relay)
+
+Players connect straight to each other. On Wi-Fi that almost always works, but phones on mobile data usually share one public address with thousands of other phones (carrier NAT), and those direct links often can't be made: joining hangs on "Finding the room…" or voice stays silent. A **TURN server** fixes this by relaying the traffic for the players who can't connect directly; everyone else still connects directly.
+
+NUNO gets relay credentials from Cloudflare Realtime TURN (free for the first 1,000 GB a month, which a group of friends will never get near: a whole evening of voice chat is a few hundred MB). The API token stays on the server: `api/ice.ts` is a Vercel function that hands each player credentials that expire after 6 hours.
+
+1. Sign in to the [Cloudflare dashboard](https://dash.cloudflare.com/) (a free account is fine), open **Realtime → TURN Server** and create a TURN key. Copy its **Turn Token ID** and **API Token** (the token is only shown once).
+2. In Vercel, open the project's **Settings → Environment Variables** and add `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_API_TOKEN` (for Production and Preview).
+3. Redeploy. `https://<your-site>/api/ice` should now list `turn.cloudflare.com` servers.
+
+Until those are set, the game simply uses STUN as before. If you'd rather use another provider's fixed credentials, set `VITE_TURN_URLS` (comma-separated `turn:` URLs), `VITE_TURN_USERNAME` and `VITE_TURN_CREDENTIAL` instead; note those end up inside the app's JavaScript where anyone can read them.
 
 ## 🪑 Seating
 

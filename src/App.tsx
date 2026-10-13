@@ -13,6 +13,7 @@ import { SettingsModal, type SettingsTab } from './components/SettingsModal';
 import { Intro } from './components/Intro';
 import { THEMES, ThemeContext } from './themes';
 import { useSettings } from './lib/settings';
+import { prefetchIceServers } from './net/ice';
 
 /** Long games collect a lot of trash talk; the table only needs the recent part. */
 const keepRecent = (list: ChatMessage[], msg: ChatMessage) => [...list.slice(-80), msg];
@@ -62,6 +63,8 @@ export const App: React.FC = () => {
 
   // An invite link joins the room straight away (it connects while the intro plays).
   useEffect(() => {
+    // Relay credentials for online play, fetched ahead so rooms open without waiting.
+    prefetchIceServers();
     if (inviteCode) handleJoinRoom(inviteCode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

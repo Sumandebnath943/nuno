@@ -10,6 +10,8 @@ beforeAll(() => {
     window: { addEventListener: noop, removeEventListener: noop, matchMedia: () => ({ matches: false }) },
     document: { addEventListener: noop, hidden: false },
     localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v), removeItem: (k: string) => store.delete(k) },
+    // No relay here: sessions fall back to STUN.
+    fetch: () => Promise.reject(new Error('offline')),
   });
 });
 

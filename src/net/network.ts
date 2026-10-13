@@ -5,7 +5,7 @@ import type { Action, GameView, Intent, SeatConfig } from '../game/types';
 import { getSettings, setRoomTheme, subscribeSettings, type ThemeId } from '../lib/settings';
 import { botTaunt, findTaunt, THEME_BOTS } from '../lib/taunts';
 import { artFor, characterAvatar } from '../themes/characters';
-import { iceServers } from './ice';
+import { getIceServers } from './ice';
 import { mixSeats } from './seating';
 import { VoiceChat } from './voice';
 import type { ChatMessage, ClientMessage, LobbySeat, LobbyState, RoomOptions, ServerMessage, VoiceState } from './protocol';
@@ -237,12 +237,12 @@ export class HostSession implements Session {
 
   private async initPeer() {
     try {
-      const { Peer } = await import('peerjs');
+      const [{ Peer }, iceServers] = await Promise.all([import('peerjs'), getIceServers()]);
       if (this.destroyed) return;
       const peerId = `nuno-${this.roomId.toLowerCase()}-host`;
       this.peer = new Peer(peerId, {
         debug: 1,
-        config: { iceServers: iceServers() },
+        config: { iceServers },
       });
 
       this.peer.on('open', (id) => {
@@ -610,12 +610,12 @@ export class ClientSession implements Session {
 
   private async initPeer() {
     try {
-      const { Peer } = await import('peerjs');
+      const [{ Peer }, iceServers] = await Promise.all([import('peerjs'), getIceServers()]);
       // The player may have left while PeerJS was loading.
       if (this.destroyed) return;
       this.peer = new Peer({
         debug: 1,
-        config: { iceServers: iceServers() },
+        config: { iceServers },
       });
 
       this.peer.on('open', () => {
