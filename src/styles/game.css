@@ -1299,7 +1299,6 @@ body {
   }
 }
 .intro-hero {
-  translate: -50% 0;
   animation: heroRise 0.7s cubic-bezier(0.2, 0.9, 0.3, 1) 1.05s both;
 }
 @keyframes heroRise {
