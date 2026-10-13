@@ -1,7 +1,8 @@
 import { forwardRef } from 'react';
 import type { Card, Color, Face, Side } from '../../game/types';
 import { CARD_RATIO, CardView } from '../CardView';
-import { CARD_COLORS, INK } from '../../lib/theme';
+import { INK } from '../../lib/theme';
+import { useTheme } from '../../themes';
 import { pileJitter } from './layout';
 
 interface DeckProps {
@@ -70,7 +71,7 @@ export const Deck = forwardRef<HTMLDivElement, DeckProps>(function Deck(
                 ))}
             </div>
             <span
-              className="font-display absolute -bottom-2 -right-3 z-10 rounded-full border-[2.5px] border-[var(--ink)] bg-white px-2 text-sm leading-6 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]"
+              className="font-display absolute -bottom-2 -right-3 z-10 rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--surface)] px-2 text-sm leading-6 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]"
               title="Cards left in the draw pile"
             >
               {count}
@@ -170,22 +171,23 @@ export const Discard = forwardRef<HTMLDivElement, DiscardProps>(function Discard
   { width, cards, hidden, color, label = true, side = 'light', colorless = false },
   ref,
 ) {
+  const theme = useTheme();
+  const pal = theme.cardColors;
   const h = width * CARD_RATIO;
   const visible = cards.filter((c) => !hidden.has(c.id));
   const compact = width < 80;
+  const alias = color ? theme.colorAlias?.[color] : undefined;
   return (
     <div className="relative flex flex-col items-center" style={{ width }}>
       <div ref={ref} data-card-w={width} className="relative" style={{ width, height: h }}>
-        {/* glow in the active colour */}
+        {/* glow in the active colour (a soft gradient, not a blur filter: cheaper on phones) */}
         <div
-          className="absolute -inset-5 rounded-[50%] blur-xl transition-colors duration-500"
+          className="absolute -inset-8 rounded-[50%]"
           style={{
             background: colorless
-              ? 'conic-gradient(#e8333a, #ffc21a, #2eb34f, #2f72e0, #e8333a)'
-              : color
-                ? CARD_COLORS[color].light
-                : 'rgba(255,255,255,0.35)',
-            opacity: 0.55,
+              ? 'radial-gradient(closest-side, rgba(255,255,255,0.55), rgba(255,255,255,0) 100%)'
+              : `radial-gradient(closest-side, ${color ? pal[color].light : 'rgba(255,255,255,0.6)'}, rgba(0,0,0,0) 100%)`,
+            opacity: 0.75,
           }}
         />
         {visible.map((c) => {
@@ -203,15 +205,16 @@ export const Discard = forwardRef<HTMLDivElement, DiscardProps>(function Discard
       </div>
       {label &&
         (colorless ? (
-          <span className="font-display mt-3 whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-white px-2.5 text-xs uppercase leading-5 tracking-wider text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
+          <span className="font-display mt-3 whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] px-2.5 text-xs uppercase leading-5 tracking-wider text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
             {compact ? 'Any card' : 'Anything goes'}
           </span>
         ) : (
           <span
             className="font-display mt-3 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2.5 text-xs uppercase leading-5 tracking-wider text-white shadow-[0_2px_0_var(--ink)] transition-colors duration-500"
-            style={{ background: color ? CARD_COLORS[color].base : '#6a55d9', textShadow: '0 1px 0 var(--ink)' }}
+            style={{ background: color ? pal[color].base : '#6a55d9', textShadow: '0 1px 0 var(--ink)' }}
+            title={alias}
           >
-            {color ? (compact ? color : `${color} to play`) : compact ? '…' : 'Picking colour…'}
+            {color ? (compact ? color : alias ? `${color} · ${alias}` : `${color} to play`) : compact ? '…' : 'Picking colour…'}
           </span>
         ))}
     </div>

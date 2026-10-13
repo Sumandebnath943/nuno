@@ -44,10 +44,10 @@ export const ChallengeResultModal: React.FC<Props> = ({ open, result, me, player
         >
           {headline}
         </div>
-        <p className="mt-4 font-medium text-[#4d4566]">{detail}</p>
+        <p className="mt-4 font-medium text-[var(--soft)]">{detail}</p>
 
         {result.revealedHand && result.revealedHand.length > 0 && (
-          <div className="mt-4 rounded-2xl border-[2.5px] border-[var(--ink)] bg-white p-3">
+          <div className="mt-4 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[var(--surface)] p-3">
             <div className="label mb-2">{offender.name}'s hand</div>
             <div className="nice-scroll flex max-h-40 flex-wrap justify-center gap-1.5 overflow-y-auto">
               {result.revealedHand.map((c) => (

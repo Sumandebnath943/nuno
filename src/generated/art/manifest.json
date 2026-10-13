@@ -1,0 +1,1200 @@
+{
+ "naruto": {
+  "characters": [
+   {
+    "id": "naruto/110876-naruto-gaara-free-download-image",
+    "name": "Gaara",
+    "full": "Gaara of the Sand",
+    "file": "c-110876-naruto-gaara-free-download-image.webp",
+    "face": "f-110876-naruto-gaara-free-download-image.webp",
+    "w": 633,
+    "h": 960,
+    "srcW": 678,
+    "srcH": 1028,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/itachi-uchiha",
+    "name": "Itachi",
+    "full": "Itachi Uchiha",
+    "file": "c-itachi-uchiha.webp",
+    "face": "f-itachi-uchiha.webp",
+    "w": 791,
+    "h": 960,
+    "srcW": 843,
+    "srcH": 1023,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/jiraiya",
+    "name": "Jiraiya",
+    "full": "Jiraiya",
+    "file": "c-jiraiya.webp",
+    "face": "f-jiraiya.webp",
+    "w": 441,
+    "h": 960,
+    "srcW": 520,
+    "srcH": 1131,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/naruto-uzumaki",
+    "name": "Naruto",
+    "full": "Naruto Uzumaki",
+    "file": "c-naruto-uzumaki.webp",
+    "face": "f-naruto-uzumaki.webp",
+    "w": 314,
+    "h": 960,
+    "srcW": 900,
+    "srcH": 2755,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/orochimaru",
+    "name": "Orochimaru",
+    "full": "Orochimaru",
+    "file": "c-orochimaru.webp",
+    "face": "f-orochimaru.webp",
+    "w": 546,
+    "h": 960,
+    "srcW": 560,
+    "srcH": 985,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/rock-lee-png",
+    "name": "Rock Lee",
+    "full": "Rock Lee",
+    "file": "c-rock-lee-png.webp",
+    "face": "f-rock-lee-png.webp",
+    "w": 233,
+    "h": 960,
+    "srcW": 838,
+    "srcH": 3459,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/sakura",
+    "name": "Sakura",
+    "full": "Sakura Haruno",
+    "file": "c-sakura.webp",
+    "face": "f-sakura.webp",
+    "w": 201,
+    "h": 731,
+    "srcW": 201,
+    "srcH": 731,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/sasuke-uchiha",
+    "name": "Sasuke",
+    "full": "Sasuke Uchiha",
+    "file": "c-sasuke-uchiha.webp",
+    "face": "f-sasuke-uchiha.webp",
+    "w": 523,
+    "h": 960,
+    "srcW": 990,
+    "srcH": 1818,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/shikamaru",
+    "name": "Shikamaru",
+    "full": "Shikamaru Nara",
+    "file": "c-shikamaru.webp",
+    "face": "f-shikamaru.webp",
+    "w": 590,
+    "h": 960,
+    "srcW": 620,
+    "srcH": 1009,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "naruto/tsunade",
+    "name": "Tsunade",
+    "full": "Tsunade",
+    "file": "c-tsunade.webp",
+    "face": "f-tsunade.webp",
+    "w": 298,
+    "h": 960,
+    "srcW": 656,
+    "srcH": 2113,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   }
+  ],
+  "backdrop": {
+   "file": "bg.webp",
+   "w": 1672,
+   "h": 941
+  },
+  "left": {
+   "file": "left.webp",
+   "w": 1000,
+   "h": 833
+  },
+  "right": {
+   "file": "right.webp",
+   "w": 1000,
+   "h": 793
+  },
+  "hero": {
+   "file": "hero.webp",
+   "w": 719,
+   "h": 1200
+  }
+ },
+ "mha": {
+  "characters": [
+   {
+    "id": "mha/aizawa",
+    "name": "Aizawa",
+    "full": "Shota Aizawa",
+    "file": "c-aizawa.webp",
+    "face": "f-aizawa.webp",
+    "w": 864,
+    "h": 867,
+    "srcW": 864,
+    "srcH": 867,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/all-for-one",
+    "name": "All For One",
+    "full": "All For One",
+    "file": "c-all-for-one.webp",
+    "face": "f-all-for-one.webp",
+    "w": 471,
+    "h": 960,
+    "srcW": 612,
+    "srcH": 1248,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/all-might-og",
+    "name": "Toshinori",
+    "full": "All Might (True Form)",
+    "file": "c-all-might-og.webp",
+    "face": "f-all-might-og.webp",
+    "w": 242,
+    "h": 480,
+    "srcW": 242,
+    "srcH": 480,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/all-might",
+    "name": "All Might",
+    "full": "All Might",
+    "file": "c-all-might.webp",
+    "face": "f-all-might.webp",
+    "w": 589,
+    "h": 960,
+    "srcW": 1124,
+    "srcH": 1831,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/bakugo",
+    "name": "Bakugo",
+    "full": "Katsuki Bakugo",
+    "file": "c-bakugo.webp",
+    "face": "f-bakugo.webp",
+    "w": 728,
+    "h": 655,
+    "srcW": 728,
+    "srcH": 655,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/dabi",
+    "name": "Dabi",
+    "full": "Dabi",
+    "file": "c-dabi.webp",
+    "face": "f-dabi.webp",
+    "w": 785,
+    "h": 960,
+    "srcW": 1297,
+    "srcH": 1586,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/endeavor",
+    "name": "Endeavor",
+    "full": "Endeavor",
+    "file": "c-endeavor.webp",
+    "face": "f-endeavor.webp",
+    "w": 419,
+    "h": 960,
+    "srcW": 696,
+    "srcH": 1593,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/gentle",
+    "name": "Gentle",
+    "full": "Gentle Criminal",
+    "file": "c-gentle.webp",
+    "face": "f-gentle.webp",
+    "w": 717,
+    "h": 960,
+    "srcW": 721,
+    "srcH": 965,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/hawks",
+    "name": "Hawks",
+    "full": "Hawks",
+    "file": "c-hawks.webp",
+    "face": "f-hawks.webp",
+    "w": 453,
+    "h": 958,
+    "srcW": 453,
+    "srcH": 958,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/kirishima",
+    "name": "Kirishima",
+    "full": "Eijiro Kirishima",
+    "file": "c-kirishima.webp",
+    "face": "f-kirishima.webp",
+    "w": 643,
+    "h": 960,
+    "srcW": 943,
+    "srcH": 1408,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/la-brava",
+    "name": "La Brava",
+    "full": "La Brava",
+    "file": "c-la-brava.webp",
+    "face": "f-la-brava.webp",
+    "w": 498,
+    "h": 639,
+    "srcW": 498,
+    "srcH": 639,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/midoriya",
+    "name": "Deku",
+    "full": "Izuku Midoriya",
+    "file": "c-midoriya.webp",
+    "face": "f-midoriya.webp",
+    "w": 525,
+    "h": 960,
+    "srcW": 1017,
+    "srcH": 1859,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/shigaraki",
+    "name": "Shigaraki",
+    "full": "Tomura Shigaraki",
+    "file": "c-shigaraki.webp",
+    "face": "f-shigaraki.webp",
+    "w": 203,
+    "h": 495,
+    "srcW": 203,
+    "srcH": 495,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/todoroki",
+    "name": "Todoroki",
+    "full": "Shoto Todoroki",
+    "file": "c-todoroki.webp",
+    "face": "f-todoroki.webp",
+    "w": 567,
+    "h": 960,
+    "srcW": 1043,
+    "srcH": 1767,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "mha/tokoyami",
+    "name": "Tokoyami",
+    "full": "Fumikage Tokoyami",
+    "file": "c-tokoyami.webp",
+    "face": "f-tokoyami.webp",
+    "w": 483,
+    "h": 587,
+    "srcW": 483,
+    "srcH": 587,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   }
+  ],
+  "backdrop": {
+   "file": "bg.webp",
+   "w": 1672,
+   "h": 941
+  },
+  "left": {
+   "file": "left.webp",
+   "w": 1000,
+   "h": 854
+  },
+  "right": {
+   "file": "right.webp",
+   "w": 1000,
+   "h": 884
+  },
+  "hero": {
+   "file": "hero.webp",
+   "w": 720,
+   "h": 1200
+  }
+ },
+ "onepiece": {
+  "characters": [
+   {
+    "id": "onepiece/luffy",
+    "name": "Luffy",
+    "full": "Monkey D. Luffy",
+    "file": "c-luffy.webp",
+    "face": "f-luffy.webp",
+    "w": 650,
+    "h": 960,
+    "srcW": 1730,
+    "srcH": 2554,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "onepiece/nami",
+    "name": "Nami",
+    "full": "Nami",
+    "file": "c-nami.webp",
+    "face": "f-nami.webp",
+    "w": 731,
+    "h": 960,
+    "srcW": 1214,
+    "srcH": 1595,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": true
+    }
+   },
+   {
+    "id": "onepiece/portgas",
+    "name": "Ace",
+    "full": "Portgas D. Ace",
+    "file": "c-portgas.webp",
+    "face": "f-portgas.webp",
+    "w": 532,
+    "h": 918,
+    "srcW": 532,
+    "srcH": 918,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "onepiece/sabo",
+    "name": "Sabo",
+    "full": "Sabo",
+    "file": "c-sabo.webp",
+    "face": "f-sabo.webp",
+    "w": 900,
+    "h": 846,
+    "srcW": 1180,
+    "srcH": 1109,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "onepiece/sanji",
+    "name": "Sanji",
+    "full": "Sanji",
+    "file": "c-sanji.webp",
+    "face": "f-sanji.webp",
+    "w": 844,
+    "h": 960,
+    "srcW": 958,
+    "srcH": 1090,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": true
+    }
+   },
+   {
+    "id": "onepiece/trafalgar",
+    "name": "Law",
+    "full": "Trafalgar Law",
+    "file": "c-trafalgar.webp",
+    "face": "f-trafalgar.webp",
+    "w": 417,
+    "h": 960,
+    "srcW": 701,
+    "srcH": 1615,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "onepiece/uta",
+    "name": "Uta",
+    "full": "Uta",
+    "file": "c-uta.webp",
+    "face": "f-uta.webp",
+    "w": 484,
+    "h": 960,
+    "srcW": 514,
+    "srcH": 1020,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "onepiece/zoro",
+    "name": "Zoro",
+    "full": "Roronoa Zoro",
+    "file": "c-zoro.webp",
+    "face": "f-zoro.webp",
+    "w": 611,
+    "h": 960,
+    "srcW": 645,
+    "srcH": 1014,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   }
+  ],
+  "backdrop": {
+   "file": "bg.webp",
+   "w": 1672,
+   "h": 941
+  },
+  "left": {
+   "file": "left.webp",
+   "w": 1000,
+   "h": 778
+  },
+  "right": {
+   "file": "right.webp",
+   "w": 1000,
+   "h": 841
+  },
+  "hero": {
+   "file": "hero.webp",
+   "w": 720,
+   "h": 1200
+  }
+ },
+ "aot": {
+  "characters": [
+   {
+    "id": "aot/annie",
+    "name": "Annie",
+    "full": "Annie Leonhart",
+    "file": "c-annie.webp",
+    "face": "f-annie.webp",
+    "w": 723,
+    "h": 960,
+    "srcW": 776,
+    "srcH": 1030,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "aot/armin",
+    "name": "Armin",
+    "full": "Armin Arlert",
+    "file": "c-armin.webp",
+    "face": "f-armin.webp",
+    "w": 765,
+    "h": 941,
+    "srcW": 765,
+    "srcH": 941,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "aot/armored-titan",
+    "name": "Armored Titan",
+    "full": "The Armored Titan",
+    "file": "c-armored-titan.webp",
+    "face": "f-armored-titan.webp",
+    "w": 664,
+    "h": 376,
+    "srcW": 664,
+    "srcH": 376,
+    "cut": {
+     "top": true,
+     "bottom": true,
+     "left": true,
+     "right": true
+    }
+   },
+   {
+    "id": "aot/colossal",
+    "name": "Colossal Titan",
+    "full": "The Colossal Titan",
+    "file": "c-colossal.webp",
+    "face": "f-colossal.webp",
+    "w": 428,
+    "h": 960,
+    "srcW": 535,
+    "srcH": 1200,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "aot/eren",
+    "name": "Eren",
+    "full": "Eren Yeager",
+    "file": "c-eren.webp",
+    "face": "f-eren.webp",
+    "w": 483,
+    "h": 808,
+    "srcW": 483,
+    "srcH": 808,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "aot/erwin",
+    "name": "Erwin",
+    "full": "Erwin Smith",
+    "file": "c-erwin.webp",
+    "face": "f-erwin.webp",
+    "w": 806,
+    "h": 960,
+    "srcW": 1536,
+    "srcH": 1829,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "aot/levi",
+    "name": "Levi",
+    "full": "Levi Ackerman",
+    "file": "c-levi.webp",
+    "face": "f-levi.webp",
+    "w": 551,
+    "h": 780,
+    "srcW": 551,
+    "srcH": 780,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "aot/mikasa",
+    "name": "Mikasa",
+    "full": "Mikasa Ackerman",
+    "file": "c-mikasa.webp",
+    "face": "f-mikasa.webp",
+    "w": 704,
+    "h": 960,
+    "srcW": 804,
+    "srcH": 1097,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   }
+  ],
+  "backdrop": {
+   "file": "bg.webp",
+   "w": 1672,
+   "h": 941
+  },
+  "left": {
+   "file": "left.webp",
+   "w": 923,
+   "h": 1000
+  },
+  "right": {
+   "file": "right.webp",
+   "w": 1000,
+   "h": 971
+  },
+  "hero": {
+   "file": "hero.webp",
+   "w": 719,
+   "h": 1200
+  }
+ },
+ "demonslayer": {
+  "characters": [
+   {
+    "id": "demonslayer/akaza",
+    "name": "Akaza",
+    "full": "Akaza",
+    "file": "c-akaza.webp",
+    "face": "f-akaza.webp",
+    "w": 707,
+    "h": 960,
+    "srcW": 1104,
+    "srcH": 1500,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/doma",
+    "name": "Doma",
+    "full": "Doma",
+    "file": "c-doma.webp",
+    "face": "f-doma.webp",
+    "w": 752,
+    "h": 960,
+    "srcW": 1032,
+    "srcH": 1318,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/gyokko",
+    "name": "Gyokko",
+    "full": "Gyokko",
+    "file": "c-gyokko.webp",
+    "face": "f-gyokko.webp",
+    "w": 210,
+    "h": 294,
+    "srcW": 210,
+    "srcH": 294,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/inosuke",
+    "name": "Inosuke",
+    "full": "Inosuke Hashibira",
+    "file": "c-inosuke.webp",
+    "face": "f-inosuke.webp",
+    "w": 373,
+    "h": 535,
+    "srcW": 373,
+    "srcH": 535,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/kokushibo",
+    "name": "Kokushibo",
+    "full": "Kokushibo",
+    "file": "c-kokushibo.webp",
+    "face": "f-kokushibo.webp",
+    "w": 636,
+    "h": 960,
+    "srcW": 1072,
+    "srcH": 1618,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": true,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/mujan",
+    "name": "Muzan",
+    "full": "Muzan Kibutsuji",
+    "file": "c-mujan.webp",
+    "face": "f-mujan.webp",
+    "w": 900,
+    "h": 949,
+    "srcW": 1064,
+    "srcH": 1122,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/nezuko",
+    "name": "Nezuko",
+    "full": "Nezuko Kamado",
+    "file": "c-nezuko.webp",
+    "face": "f-nezuko.webp",
+    "w": 374,
+    "h": 833,
+    "srcW": 374,
+    "srcH": 833,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/rengoku",
+    "name": "Rengoku",
+    "full": "Kyojuro Rengoku",
+    "file": "c-rengoku.webp",
+    "face": "f-rengoku.webp",
+    "w": 607,
+    "h": 960,
+    "srcW": 1188,
+    "srcH": 1880,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/sanemi",
+    "name": "Sanemi",
+    "full": "Sanemi Shinazugawa",
+    "file": "c-sanemi.webp",
+    "face": "f-sanemi.webp",
+    "w": 764,
+    "h": 684,
+    "srcW": 764,
+    "srcH": 684,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/tanjiro",
+    "name": "Tanjiro",
+    "full": "Tanjiro Kamado",
+    "file": "c-tanjiro.webp",
+    "face": "f-tanjiro.webp",
+    "w": 672,
+    "h": 960,
+    "srcW": 678,
+    "srcH": 969,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "demonslayer/zenitsu",
+    "name": "Zenitsu",
+    "full": "Zenitsu Agatsuma",
+    "file": "c-zenitsu.webp",
+    "face": "f-zenitsu.webp",
+    "w": 351,
+    "h": 348,
+    "srcW": 351,
+    "srcH": 348,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   }
+  ],
+  "hero": {
+   "file": "hero.webp",
+   "w": 718,
+   "h": 1200
+  },
+  "backdrop": {
+   "file": "bg.webp",
+   "w": 1672,
+   "h": 941
+  },
+  "left": {
+   "file": "left.webp",
+   "w": 1000,
+   "h": 801
+  },
+  "right": {
+   "file": "right.webp",
+   "w": 660,
+   "h": 1000
+  }
+ },
+ "dbz": {
+  "characters": [
+   {
+    "id": "dbz/beerus",
+    "name": "Beerus",
+    "full": "Beerus",
+    "file": "c-beerus.webp",
+    "face": "f-beerus.webp",
+    "w": 354,
+    "h": 960,
+    "srcW": 561,
+    "srcH": 1523,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/broly",
+    "name": "Broly",
+    "full": "Broly",
+    "file": "c-broly.webp",
+    "face": "f-broly.webp",
+    "w": 428,
+    "h": 699,
+    "srcW": 428,
+    "srcH": 699,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/cell",
+    "name": "Cell",
+    "full": "Perfect Cell",
+    "file": "c-cell.webp",
+    "face": "f-cell.webp",
+    "w": 685,
+    "h": 960,
+    "srcW": 722,
+    "srcH": 1012,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/gohan",
+    "name": "Gohan",
+    "full": "Gohan (Beast)",
+    "file": "c-gohan.webp",
+    "face": "f-gohan.webp",
+    "w": 637,
+    "h": 960,
+    "srcW": 2717,
+    "srcH": 4096,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/goku-black",
+    "name": "Goku Black",
+    "full": "Goku Black (Ros\u00e9)",
+    "file": "c-goku-black.webp",
+    "face": "f-goku-black.webp",
+    "w": 718,
+    "h": 960,
+    "srcW": 1451,
+    "srcH": 1939,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/goku",
+    "name": "Goku",
+    "full": "Goku",
+    "file": "c-goku.webp",
+    "face": "f-goku.webp",
+    "w": 426,
+    "h": 960,
+    "srcW": 435,
+    "srcH": 980,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/golden-frieza",
+    "name": "Frieza",
+    "full": "Golden Frieza",
+    "file": "c-golden-frieza.webp",
+    "face": "f-golden-frieza.webp",
+    "w": 547,
+    "h": 960,
+    "srcW": 670,
+    "srcH": 1175,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/jiren",
+    "name": "Jiren",
+    "full": "Jiren",
+    "file": "c-jiren.webp",
+    "face": "f-jiren.webp",
+    "w": 535,
+    "h": 916,
+    "srcW": 535,
+    "srcH": 916,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/trunks",
+    "name": "Trunks",
+    "full": "Trunks",
+    "file": "c-trunks.webp",
+    "face": "f-trunks.webp",
+    "w": 616,
+    "h": 960,
+    "srcW": 2075,
+    "srcH": 3235,
+    "cut": {
+     "top": false,
+     "bottom": false,
+     "left": false,
+     "right": false
+    }
+   },
+   {
+    "id": "dbz/vegeta",
+    "name": "Vegeta",
+    "full": "Vegeta",
+    "file": "c-vegeta.webp",
+    "face": "f-vegeta.webp",
+    "w": 476,
+    "h": 960,
+    "srcW": 933,
+    "srcH": 1880,
+    "cut": {
+     "top": false,
+     "bottom": true,
+     "left": false,
+     "right": false
+    }
+   }
+  ],
+  "backdrop": {
+   "file": "bg.webp",
+   "w": 1672,
+   "h": 941
+  },
+  "left": {
+   "file": "left.webp",
+   "w": 1000,
+   "h": 748
+  },
+  "right": {
+   "file": "right.webp",
+   "w": 1000,
+   "h": 830
+  },
+  "hero": {
+   "file": "hero.webp",
+   "w": 724,
+   "h": 1200
+  }
+ }
+}

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { CARD_COLORS, INK } from '../lib/theme';
+import { INK } from '../lib/theme';
+import { useTheme } from '../themes';
 import type { Color } from '../game/types';
 
 export const AVATARS = ['😎', '🦄', '🦊', '🐉', '🤖', '🍕', '🚀', '🐼', '🥷', '👾', '🦁', '👑', '🐸', '🐙', '🦖', '🌮'];
@@ -62,7 +63,7 @@ export function Modal({ open, onClose, children, className = 'max-w-md', backdro
   return (
     <div
       className="modal-wrap fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 animate-fadeIn"
-      style={{ background: backdrop, backdropFilter: 'blur(3px)' }}
+      style={{ background: backdrop }}
       onClick={onClose}
     >
       <div
@@ -87,10 +88,11 @@ export function CloseButton({ onClick }: { onClick: () => void }) {
 
 /** Colour dot + name, used wherever the active colour is mentioned. */
 export function ColorChip({ color, className = '' }: { color: Color; className?: string }) {
+  const pal = useTheme().cardColors;
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border-2 px-2.5 py-0.5 font-display text-white ${className}`}
-      style={{ background: CARD_COLORS[color].base, borderColor: INK, textShadow: `0 1px 0 ${INK}` }}
+      style={{ background: pal[color].base, borderColor: INK, textShadow: `0 1px 0 ${INK}` }}
     >
       {color.toUpperCase()}
     </span>

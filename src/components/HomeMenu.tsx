@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import type { Card, Difficulty, GameMode } from '../game/types';
 import { MODES } from '../game/modes';
 import { GUIDES } from '../lib/modeGuide';
 import { CardView } from './CardView';
 import { ModeButton, ModePicker } from './ModePicker';
 import { AVATARS, Logo } from './ui';
-import { sfx, isMuted, setMuted } from '../lib/sound';
+import { sfx, setMuted } from '../lib/sound';
+import { useSettings } from '../lib/settings';
+import { useTheme } from '../themes';
+import { AmbientCanvas } from './ThemeStage';
+import { Avatar } from './Avatar';
+import { artFor, characterAvatar } from '../themes/characters';
 
 interface Props {
   name: string;
@@ -15,6 +20,7 @@ interface Props {
   onCreateRoom: (playerCount: number, difficulty: Difficulty, targetScore: number, mode: GameMode) => void;
   onJoinRoom: (roomId: string) => void;
   onOpenRules: (mode: GameMode, focus?: 'rules' | 'cards') => void;
+  onOpenSettings: () => void;
 }
 
 const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -62,7 +68,10 @@ export const HomeMenu: React.FC<Props> = ({
   onCreateRoom,
   onJoinRoom,
   onOpenRules,
+  onOpenSettings,
 }) => {
+  const theme = useTheme();
+  const { muted } = useSettings();
   const [tab, setTab] = useState<'bots' | 'friends'>('bots');
   const [mode, setMode] = useState<GameMode>(() =>
     read('nuno.mode', ['classic', 'nomercy', 'flip', 'attack', 'allwild', 'spin'] as const, 'classic'),
@@ -74,7 +83,6 @@ export const HomeMenu: React.FC<Props> = ({
   );
   const [format, setFormat] = useState<Format>(() => read('nuno.format', ['round', 'short', 'official'] as const, 'round'));
   const [joinCode, setJoinCode] = useState('');
-  const [muted, setMutedState] = useState(isMuted());
   const [pickingAvatar, setPickingAvatar] = useState(false);
 
   const remember = (key: string, value: string | number) => localStorage.setItem(key, String(value));
@@ -84,7 +92,6 @@ export const HomeMenu: React.FC<Props> = ({
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
-    setMutedState(next);
     if (!next) sfx.click();
   };
 
@@ -96,17 +103,47 @@ export const HomeMenu: React.FC<Props> = ({
   };
 
   const modeButton = <ModeButton mode={mode} onClick={() => (sfx.click(), setPicking(true))} />;
+  const themeButton = (
+    <button
+      type="button"
+      onClick={() => (sfx.click(), onOpenSettings())}
+      className="group flex h-10 w-full items-center gap-2.5 overflow-hidden rounded-2xl sm:h-11 border-[2.5px] border-[var(--ink)] px-2 text-left shadow-[0_3px_0_var(--ink)] transition-transform hover:-translate-y-0.5 active:translate-y-0.5 short:h-10"
+      style={{ background: theme.vars['--room-bg'] ?? 'linear-gradient(90deg, #3b2f86, #17143d)' }}
+      title="Pick a theme"
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] text-lg">
+        {theme.emoji}
+      </span>
+      <span className="min-w-0 flex-1 truncate leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.6)' }}>
+        <span className="font-display text-base">{theme.title}</span>
+        <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider opacity-85">{theme.id === 'classic' ? 'try an anime theme!' : 'theme'}</span>
+      </span>
+      <span className="chip shrink-0 px-2.5 py-0.5 text-sm group-hover:bg-[var(--chip-hover)]">🎨 Theme</span>
+    </button>
+  );
+
   const heroCards = GUIDES[mode].cards.slice(0, 5);
+  const art = artFor(theme.id);
+  const characters = art.characters;
+  const free = useFreeSpots(FLOATERS.length, [theme.id, mode, tab, pickingAvatar]);
 
   return (
-    <div className="bg-room relative flex h-[100dvh] w-full flex-col overflow-hidden">
-      {/* Decorative floating cards */}
-      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+    <div ref={free.root} className="relative flex h-[100dvh] w-full flex-col overflow-hidden">
+      <AmbientCanvas />
+      {/* Decorative floating cards: only the ones that land in empty space are shown,
+          and none over a theme's own background art. */}
+      <div className={`pointer-events-none absolute inset-0 ${art.backdrop ? 'hidden' : ''}`} aria-hidden="true">
         {FLOATERS.map((f, i) => (
           <div
             key={i}
+            ref={(el) => (free.items.current[i] = el)}
             className={`absolute animate-floaty ${f.wide ? 'hidden lg:block' : 'hidden sm:block'} land:!hidden`}
-            style={{ ...f.pos, ['--r' as string]: `${f.r}deg`, animationDelay: `${f.delay}s` }}
+            style={{
+              ...f.pos,
+              ['--r' as string]: `${f.r}deg`,
+              animationDelay: `${f.delay}s`,
+              visibility: free.ok[i] ? 'visible' : 'hidden',
+            }}
           >
             <CardView card={f.card} faceDown={!f.card} width={f.w} />
           </div>
@@ -114,24 +151,52 @@ export const HomeMenu: React.FC<Props> = ({
       </div>
 
       {/* Top bar (moves into the hero column on short landscape screens) */}
-      <header className="safe-top relative z-10 flex items-center justify-end gap-2 p-3 phone:py-2 sm:p-4 lg:absolute lg:inset-x-0 lg:top-0 land:hidden">
-        <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={(focus) => onOpenRules(mode, focus)} />
+      <header
+        ref={(el) => (free.blockers.current[0] = el)}
+        className="safe-top relative z-10 flex items-center justify-end gap-2 p-3 phone:py-2 sm:p-4 land:hidden lowdesk:hidden"
+      >
+        <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={(focus) => onOpenRules(mode, focus)} onOpenSettings={onOpenSettings} />
       </header>
 
       <main className="nice-scroll relative z-10 flex min-h-0 flex-1 overflow-y-auto">
-        <div className="m-auto flex w-full flex-col items-center gap-3 px-4 pb-4 short:gap-2 sm:gap-5 lg:flex-row lg:justify-center lg:gap-16 lg:pb-10 land:flex-row land:justify-center land:gap-8 land:py-3">
+        <div className="m-auto flex w-full flex-col items-center gap-3 px-4 pb-4 short:gap-2 sm:gap-5 lg:flex-row lg:justify-center lg:gap-16 lg:pb-10 lowdesk:!py-3 land:flex-row land:justify-center land:gap-8 land:py-3">
           {/* Hero */}
-          <section className="flex flex-col items-center">
-            <Logo className="w-[min(76vw,300px)] drop-shadow-[0_10px_0_rgba(0,0,0,0.25)] phone:w-[min(62vw,230px)] sm:w-[360px] lg:w-[470px] land:!w-[260px]" />
-            <p className="font-display mt-1 text-center text-base text-white/90 phone:hidden sm:text-xl lg:mt-3 land:!hidden">
-              Match it. Slam it. <span className="text-[#ffd21f]">Shout NUNO!</span>
+          <section ref={(el) => (free.blockers.current[1] = el)} className="flex flex-col items-center">
+            {/* The theme's hero art stands over the logo, title-screen style (desktop sizes). */}
+            {art.hero && (
+              <img
+                src={art.hero.url}
+                alt=""
+                draggable={false}
+                className="pointer-events-none hidden select-none object-contain drop-shadow-[0_14px_18px_rgba(0,0,0,0.55)] lg:block"
+                style={{ height: 'clamp(220px, calc(100dvh - 340px), 640px)', aspectRatio: `${art.hero.w} / ${art.hero.h}` }}
+              />
+            )}
+            <Logo
+              className={`relative w-[min(76vw,300px)] drop-shadow-[0_10px_0_rgba(0,0,0,0.25)] phone:w-[min(62vw,230px)] sm:w-[360px] land:!w-[260px] ${
+                art.hero ? 'lg:-mt-14 lg:w-[400px] lowdesk:!w-[320px]' : 'lg:w-[470px]'
+              }`}
+            />
+            {theme.edition && (
+              <span className="font-display -mt-2 rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--accent-a)] px-3 text-sm leading-6 text-[var(--ink)] shadow-[0_3px_0_var(--ink)] sm:text-base sm:leading-7">
+                {theme.emoji} {theme.edition}
+              </span>
+            )}
+            <p
+              className={`font-display mt-1 text-center text-base text-white/90 phone:hidden sm:text-xl lg:mt-3 land:!hidden ${theme.edition ? 'hide-on-phone' : ''}`}
+              style={{ textShadow: '0 2px 0 rgba(0,0,0,0.45)' }}
+            >
+              Match it. Slam it. <span className="text-[var(--yellow)]">Shout NUNO!</span>
             </p>
             {/* On short landscape screens the mode and menu buttons live here instead. */}
-            <div className="mt-3 hidden w-[280px] land:block">{modeButton}</div>
-            <div className="mt-3 hidden gap-2 land:flex">
-              <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={(focus) => onOpenRules(mode, focus)} />
+            <div className="mt-3 hidden w-[280px] space-y-2 land:block">
+              {modeButton}
+              {themeButton}
             </div>
-            <div className="mt-6 hidden h-[190px] items-end justify-center lg:flex [@media(max-height:760px)]:!hidden">
+            <div className="mt-3 hidden gap-2 land:flex lowdesk:mt-4 lowdesk:flex">
+              <MenuButtons muted={muted} onToggleMute={toggleMute} onOpenRules={(focus) => onOpenRules(mode, focus)} onOpenSettings={onOpenSettings} />
+            </div>
+            <div className={`mt-6 hidden h-[190px] items-end justify-center [@media(max-height:760px)]:!hidden ${art.hero ? '' : 'lg:flex'}`}>
               {heroCards.map((c, i) => {
                 const off = i - (heroCards.length - 1) / 2;
                 return (
@@ -153,7 +218,9 @@ export const HomeMenu: React.FC<Props> = ({
           </section>
 
           {/* Setup panel */}
-          <section className="panel relative w-full max-w-[440px] shrink-0 p-4 short:p-3.5 sm:p-5 land:max-w-[400px] land:!p-3.5">
+          <section
+            ref={(el) => (free.blockers.current[2] = el)}
+            className="panel relative w-full max-w-[440px] shrink-0 p-4 short:p-3.5 sm:p-5 land:max-w-[400px] land:!p-3.5">
             {/* Profile */}
             <div className="flex items-center gap-3">
               <button
@@ -162,7 +229,7 @@ export const HomeMenu: React.FC<Props> = ({
                 aria-label="Choose avatar"
                 title="Choose avatar"
               >
-                {avatar}
+                <Avatar value={avatar} fill />
               </button>
               <div className="min-w-0 flex-1">
                 <label htmlFor="nuno-name" className="label block short:sr-only">
@@ -179,30 +246,61 @@ export const HomeMenu: React.FC<Props> = ({
             </div>
 
             {pickingAvatar && (
-              <div className="panel absolute left-3 right-3 top-[72px] z-20 grid grid-cols-8 gap-1.5 !rounded-2xl p-2.5 animate-popIn">
-                {AVATARS.map((av) => (
-                  <button
-                    key={av}
-                    onClick={() => {
-                      sfx.pop();
-                      onUpdateProfile(name, av);
-                      setPickingAvatar(false);
-                    }}
-                    className={`flex aspect-square items-center justify-center rounded-xl text-xl transition-transform hover:scale-110 ${
-                      av === avatar ? 'bg-[#ffe066] ring-2 ring-[var(--ink)]' : 'hover:bg-black/5'
-                    }`}
-                  >
-                    {av}
-                  </button>
-                ))}
+              <div className="panel nice-scroll absolute left-3 right-3 top-[72px] z-20 max-h-[min(60dvh,420px)] overflow-y-auto !rounded-2xl p-2.5 animate-popIn">
+                {characters.length > 0 && (
+                  <>
+                    <div className="label mb-1.5">{theme.id === 'classic' ? 'Characters' : `${theme.emoji} ${theme.title} characters`}</div>
+                    <div className="mb-2.5 grid grid-cols-5 gap-1.5">
+                      {characters.map((c) => {
+                        const av = characterAvatar(c);
+                        return (
+                          <button
+                            key={c.id}
+                            title={c.name}
+                            onClick={() => {
+                              sfx.pop();
+                              onUpdateProfile(name, av);
+                              setPickingAvatar(false);
+                            }}
+                            className={`relative aspect-square overflow-hidden rounded-xl border-2 border-[var(--ink)] transition-transform hover:scale-105 ${
+                              av === avatar ? 'ring-4 ring-[var(--accent-b)]' : ''
+                            }`}
+                          >
+                            <img src={c.face} alt={c.name} className="h-full w-full object-cover" draggable={false} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+                <div className="grid grid-cols-8 gap-1.5">
+                  {AVATARS.map((av) => (
+                    <button
+                      key={av}
+                      onClick={() => {
+                        sfx.pop();
+                        onUpdateProfile(name, av);
+                        setPickingAvatar(false);
+                      }}
+                      className={`flex aspect-square items-center justify-center rounded-xl text-xl transition-transform hover:scale-110 ${
+                        av === avatar ? 'bg-[var(--accent-a)] ring-2 ring-[var(--ink)]' : 'hover:bg-black/5'
+                      }`}
+                    >
+                      {av}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
             {/* Game mode */}
-            <div className="mt-3 short:mt-2.5 land:hidden">{modeButton}</div>
+            <div className="mt-2.5 space-y-2 short:mt-2 land:hidden">
+              {modeButton}
+              {themeButton}
+            </div>
 
             {/* Bots or friends */}
-            <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[#efe6d2] p-1 short:mt-2.5 land:mt-2">
+            <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[var(--panel-2)] p-1 short:mt-2.5 land:mt-2">
               {(
                 [
                   ['bots', '🤖  vs Bots'],
@@ -214,8 +312,8 @@ export const HomeMenu: React.FC<Props> = ({
                   onClick={() => (sfx.click(), setTab(id))}
                   className={`font-display h-10 rounded-xl text-base transition-colors short:h-9 land:h-8 ${
                     tab === id
-                      ? 'border-2 border-[var(--ink)] bg-white shadow-[0_2px_0_var(--ink)]'
-                      : 'text-[#6b6385] hover:text-[var(--ink)]'
+                      ? 'border-2 border-[var(--ink)] bg-[var(--surface)] shadow-[0_2px_0_var(--ink)]'
+                      : 'text-[var(--muted)] hover:text-[var(--ink)]'
                   }`}
                 >
                   {label}
@@ -291,10 +389,10 @@ export const HomeMenu: React.FC<Props> = ({
                   Create a {MODES[mode].name} room
                 </button>
 
-                <div className="flex items-center gap-3 text-[#9a93ad]">
-                  <div className="h-[2px] flex-1 bg-[#e3d9c3]" />
+                <div className="flex items-center gap-3 text-[var(--faint)]">
+                  <div className="h-[2px] flex-1 bg-[var(--line)]" />
                   <span className="label">or join one</span>
-                  <div className="h-[2px] flex-1 bg-[#e3d9c3]" />
+                  <div className="h-[2px] flex-1 bg-[var(--line)]" />
                 </div>
 
                 <div className="flex gap-2">
@@ -342,10 +440,12 @@ function MenuButtons({
   muted,
   onToggleMute,
   onOpenRules,
+  onOpenSettings,
 }: {
   muted: boolean;
   onToggleMute: () => void;
   onOpenRules: (focus?: 'rules' | 'cards') => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <>
@@ -359,6 +459,9 @@ function MenuButtons({
       </button>
       <button className="icon-btn" onClick={onToggleMute} aria-label={muted ? 'Unmute' : 'Mute'}>
         {muted ? '🔇' : '🔊'}
+      </button>
+      <button className="icon-btn" onClick={() => (sfx.click(), onOpenSettings())} aria-label="Settings" title="Theme, pace & sound">
+        ⚙️
       </button>
     </>
   );
@@ -411,7 +514,42 @@ function PlayerCountPicker({ value, onChange, hint }: { value: number; onChange:
           </button>
         ))}
       </div>
-      {hint && <p className="mt-1.5 text-xs font-medium text-[#6b6385] short:hidden">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs font-medium text-[var(--muted)] short:hidden">{hint}</p>}
     </div>
   );
+}
+
+/**
+ * Decides which decorative cards have room: a card is shown only if it doesn't
+ * touch the top bar, the logo or the setup panel at the current window size.
+ */
+function useFreeSpots(count: number, deps: unknown[]) {
+  const root = useRef<HTMLDivElement>(null);
+  const items = useRef<(HTMLElement | null)[]>([]);
+  const blockers = useRef<(HTMLElement | null)[]>([]);
+  const [ok, setOk] = useState<boolean[]>(() => Array(count).fill(false));
+
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const M = 18; // breathing room, plus the floating bob
+    const check = () => {
+      const walls = blockers.current.filter(Boolean).map((b) => b!.getBoundingClientRect());
+      const next = items.current.map((it) => {
+        if (!it) return false;
+        const r = it.getBoundingClientRect();
+        if (!r.width) return false;
+        return !walls.some((w) => r.left < w.right + M && r.right > w.left - M && r.top < w.bottom + M && r.bottom > w.top - M);
+      });
+      setOk((prev) => (prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next));
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    blockers.current.forEach((b) => b && ro.observe(b));
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
+  return { root, items, blockers, ok };
 }

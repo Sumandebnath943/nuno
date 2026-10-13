@@ -4,3 +4,9 @@ dist
 *.log
 .DS_Store
 .env*
+
+# Original character art stays on your machine; the game ships the processed
+# copies in src/generated/art (run `npm run art` after changing the originals).
+src/assets/characters/*
+!src/assets/characters/art.json
+!src/assets/characters/README.md

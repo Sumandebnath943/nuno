@@ -11,6 +11,8 @@ export default {
         // Short landscape screens below desktop width (phones held sideways, small windows).
         // Wider screens use the regular desktop row layout.
         land: { raw: '(min-width: 640px) and (max-width: 1023px) and (max-height: 720px)' },
+        // Desktop-wide but short windows (a laptop browser that isn't full screen).
+        lowdesk: { raw: '(min-width: 1024px) and (max-height: 700px)' },
       },
       fontFamily: {
         display: ['"Lilita One"', 'system-ui', 'sans-serif'],

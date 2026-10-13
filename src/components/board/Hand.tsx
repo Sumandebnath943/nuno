@@ -22,6 +22,8 @@ interface Props {
   touch: boolean;
   registerCard: (id: string, el: HTMLElement | null) => void;
   onPlay: (card: Card, el: HTMLElement) => void;
+  /** What a card does, for the hover / tap help ("Next player draws 2"). */
+  describe?: (card: Card) => { name: string; text: string } | null;
 }
 
 /** Cards can't overlap more than this before the hand turns into a scrollable strip. */
@@ -29,7 +31,7 @@ const MIN_SPACING = 0.36;
 
 /** Your hand, fanned along the bottom of the table. */
 export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
-  { cards, cw, maxWidth, bottom, hidden, playable, myTurn, dimOthers, highlightId, side, touch, registerCard, onPlay },
+  { cards, cw, maxWidth, bottom, hidden, playable, myTurn, dimOthers, highlightId, side, touch, registerCard, onPlay, describe },
   ref,
 ) {
   const [picked, setPicked] = useState<string | null>(null);
@@ -37,10 +39,10 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
   const ch = cw * CARD_RATIO;
   const mid = (n - 1) / 2;
 
-  // Forget the picked-up card when the turn moves on or it leaves the hand.
+  // Forget the picked-up card when it leaves the hand.
   useEffect(() => {
-    if (picked && (!myTurn || !cards.some((c) => c.id === picked))) setPicked(null);
-  }, [myTurn, cards, picked]);
+    if (picked && !cards.some((c) => c.id === picked)) setPicked(null);
+  }, [cards, picked]);
 
   // Big hands fan flatter so the edge cards don't tip into the controls.
   const rotStep = Math.min(3.4, 26 / Math.max(n, 1));
@@ -53,10 +55,16 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
   const curve = scroll ? 0 : Math.min(cw * 0.2, n * 2.2);
   const lift = cw * 0.2;
 
+  // Touch: the first tap picks a card up and says what it does; the second plays it.
+  // You can pick cards up to read them even when it isn't your turn.
   const tap = (card: Card, el: HTMLElement) => {
-    if (!touch || picked === card.id) {
+    if (!touch || (picked === card.id && myTurn)) {
       setPicked(null);
-      onPlay(card, el);
+      if (myTurn) onPlay(card, el);
+      return;
+    }
+    if (picked === card.id) {
+      setPicked(null);
       return;
     }
     sfx.hover();
@@ -70,6 +78,7 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
     const rot = scroll ? 0 : (i - mid) * rotStep;
     const arc = mid > 0 && !scroll ? ((i - mid) / mid) ** 2 * curve : 0;
     const raise = isPicked ? -cw * 0.55 : isDrawn ? -cw * 0.34 : isPlayable ? -lift : 0;
+    const help = describe?.(card) ?? null;
     return (
       <motion.div
         key={card.id}
@@ -80,12 +89,28 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
         transition={{ type: 'spring', stiffness: 520, damping: 40, mass: 0.8 }}
       >
         {isPicked && (
-          <span
-            className={`font-display pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2 text-xs leading-6 shadow-[0_2px_0_var(--ink)] animate-popIn ${
-              isPlayable ? 'bg-[var(--yellow)] text-[var(--ink)]' : 'bg-white text-[#6b6385]'
-            }`}
-          >
-            {isPlayable ? 'Tap again to play' : 'Can’t play this'}
+          <span className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-[220px] -translate-x-1/2 flex-col items-center gap-1 animate-popIn">
+            {help && (
+              <span className="rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)]">
+                <b className="font-display text-xs text-[var(--ink)]">{help.name}</b>
+                <br />
+                {help.text}
+              </span>
+            )}
+            <span
+              className={`font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2 text-xs leading-6 shadow-[0_2px_0_var(--ink)] ${
+                isPlayable ? 'bg-[var(--yellow)] text-[var(--ink)]' : 'bg-[var(--surface)] text-[var(--muted)]'
+              }`}
+            >
+              {!myTurn ? 'Not your turn' : isPlayable ? 'Tap again to play' : 'Can’t play this'}
+            </span>
+          </span>
+        )}
+        {!touch && help && (
+          <span className="card-tip absolute bottom-full left-1/2 z-10 mb-6 w-max max-w-[220px] rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)]">
+            <b className="font-display text-xs text-[var(--ink)]">{help.name}</b>
+            <br />
+            {help.text}
           </span>
         )}
         <button
@@ -93,7 +118,7 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
           ref={(el) => registerCard(card.id, el)}
           data-card-w={cw}
           data-rot={rot}
-          disabled={!myTurn}
+          disabled={!myTurn && !touch}
           onClick={(e) => tap(card, e.currentTarget)}
           aria-label={`${cardLabel(card)}${isPlayable ? ' (playable)' : ''}`}
           className={`hand-card block rounded-[10%/6.5%] p-0 ${isPlayable ? 'is-playable' : ''}`}

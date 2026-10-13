@@ -32,6 +32,8 @@ export interface ChatMessage {
   isSystem?: boolean;
   /** Seat of the sender, so the table can show it as a speech bubble. */
   seat?: number;
+  /** Trash talk: id of a ready-made line (see lib/taunts.ts). */
+  taunt?: string;
 }
 
 // Host -> Client messages
@@ -46,6 +48,7 @@ export type ClientMessage =
   | { type: 'join'; name: string; avatar: string }
   | { type: 'action'; intent: Intent }
   | { type: 'chat'; text: string }
+  | { type: 'taunt'; id: string }
   | { type: 'updateSeat'; index: number; kind: 'bot' | 'human' }
   | { type: 'updateOptions'; options: Partial<RoomOptions> }
   | { type: 'startGame' };

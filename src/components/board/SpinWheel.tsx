@@ -4,6 +4,7 @@ import { WHEEL } from '../../game/types';
 import { WHEEL_INFO } from '../../lib/modeGuide';
 import { INK } from '../../lib/theme';
 import { WHEEL_SPIN_MS, type WheelSpin } from './useTableFx';
+import { Avatar } from '../Avatar';
 
 const SHORT: Record<WheelSegment, string> = {
   almostUno: 'Almost NUNO',
@@ -111,7 +112,13 @@ export function SpinWheel({ waitingFor, spin, players, me, size, x, y, onSpin }:
           </button>
         ) : (
           <span className="font-display whitespace-nowrap rounded-full bg-[rgba(27,21,48,0.8)] px-3 py-1 text-base text-white">
-            {spin ? `${players[spinner]?.name} spun…` : `${players[spinner]?.avatar} ${players[spinner]?.name} has to spin…`}
+            {spin ? (
+              `${players[spinner]?.name} spun…`
+            ) : (
+              <>
+                <Avatar value={players[spinner]?.avatar} /> {players[spinner]?.name} has to spin…
+              </>
+            )}
           </span>
         )}
       </div>

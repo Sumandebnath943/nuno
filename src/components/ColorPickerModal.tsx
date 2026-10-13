@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Card, Color, Side } from '../game/types';
-import { CARD_COLORS, INK } from '../lib/theme';
+import { INK } from '../lib/theme';
+import { useTheme } from '../themes';
 import { Modal } from './ui';
 import { sfx } from '../lib/sound';
 
@@ -42,6 +43,8 @@ export const ColorPickerModal: React.FC<Props> = ({
   onSelect,
   onCancel,
 }) => {
+  const pal = useTheme().cardColors;
+  const alias = useTheme().colorAlias;
   const WEDGES = SLOTS.map((slot, i) => ({ ...slot, color: LAYOUT[side][i] }));
   const counts = new Map<Color, number>(WEDGES.map((w) => [w.color, 0]));
   for (const c of hand) {
@@ -54,7 +57,7 @@ export const ColorPickerModal: React.FC<Props> = ({
     <Modal open={open} onClose={onCancel} className="max-w-sm">
       <div className="p-5 text-center sm:p-6">
         <h2 className="font-display text-3xl">{title}</h2>
-        <p className="mt-1 text-sm font-medium text-[#6b6385]">{subtitle}</p>
+        <p className="mt-1 text-sm font-medium text-[var(--muted)]">{subtitle}</p>
 
         <svg viewBox="-112 -112 224 224" className="mx-auto mt-4 w-60 overflow-visible sm:w-64" role="group" aria-label="Colours">
           <circle r={R + 8} fill={INK} transform="translate(0 7)" />
@@ -63,7 +66,7 @@ export const ColorPickerModal: React.FC<Props> = ({
               key={w.color}
               role="button"
               tabIndex={0}
-              aria-label={`${w.color}, you hold ${counts.get(w.color)!}`}
+              aria-label={`${w.color}${alias?.[w.color] ? ` (${alias[w.color]})` : ''}, you hold ${counts.get(w.color)!}`}
               className="wedge cursor-pointer outline-none"
               onClick={() => {
                 sfx.click();
@@ -74,7 +77,7 @@ export const ColorPickerModal: React.FC<Props> = ({
               }}
               style={{ ['--dx' as string]: `${w.dx}px`, ['--dy' as string]: `${w.dy}px` }}
             >
-              <path d={w.d} fill={CARD_COLORS[w.color].base} stroke={INK} strokeWidth="4" strokeLinejoin="round" />
+              <path d={w.d} fill={pal[w.color].base} stroke={INK} strokeWidth="4" strokeLinejoin="round" />
               <path d={w.d} fill="url(#n-sheen)" />
               <text
                 x={w.lx}
@@ -115,7 +118,7 @@ export const ColorPickerModal: React.FC<Props> = ({
         {onCancel && (
           <button
             onClick={onCancel}
-            className="mt-5 text-sm font-semibold text-[#6b6385] underline underline-offset-2 hover:text-[var(--ink)]"
+            className="mt-5 text-sm font-semibold text-[var(--muted)] underline underline-offset-2 hover:text-[var(--ink)]"
           >
             Cancel — keep the card
           </button>

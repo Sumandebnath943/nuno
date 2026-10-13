@@ -8,6 +8,13 @@ import { GameBoard } from './components/GameBoard';
 import { RulesModal } from './components/RulesModal';
 import { CardDefs } from './components/CardView';
 import { Logo } from './components/ui';
+import { ThemeBackdrop } from './components/ThemeStage';
+import { SettingsModal } from './components/SettingsModal';
+import { THEMES, ThemeContext } from './themes';
+import { useSettings } from './lib/settings';
+
+/** Long games collect a lot of trash talk; the table only needs the recent part. */
+const keepRecent = (list: ChatMessage[], msg: ChatMessage) => [...list.slice(-80), msg];
 
 function generateRoomId(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -43,7 +50,10 @@ export const App: React.FC = () => {
     mode: 'classic',
     focus: 'rules',
   });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const sessionRef = useRef<Session | null>(null);
+  const settings = useSettings();
+  const theme = THEMES[settings.theme];
 
   // Check URL query param for room invite on mount
   useEffect(() => {
@@ -79,7 +89,7 @@ export const App: React.FC = () => {
     const sess = new LocalSession(profile.name, profile.avatar, options, {
       onView: (v) => setView(v),
       onLobby: () => {},
-      onChat: (msg) => setChatMessages((prev) => [...prev, msg]),
+      onChat: (msg) => setChatMessages((prev) => keepRecent(prev, msg)),
       onError: (err) => setErrorMessage(err),
     });
     sessionRef.current = sess;
@@ -101,7 +111,7 @@ export const App: React.FC = () => {
         setLobby(l);
         setYourSeat(seat);
       },
-      onChat: (msg) => setChatMessages((prev) => [...prev, msg]),
+      onChat: (msg) => setChatMessages((prev) => keepRecent(prev, msg)),
       onError: (err) => setErrorMessage(err),
     });
 
@@ -124,7 +134,7 @@ export const App: React.FC = () => {
         setYourSeat(seat);
         if (!l.inGame) setScreen('lobby');
       },
-      onChat: (msg) => setChatMessages((prev) => [...prev, msg]),
+      onChat: (msg) => setChatMessages((prev) => keepRecent(prev, msg)),
       onError: (err) => setErrorMessage(err),
     });
 
@@ -162,83 +172,94 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-h-screen">
-      <CardDefs />
-      {/* Toast Error Alert */}
-      {errorMessage && (
-        <div
-          role="alert"
-          className="font-display fixed left-1/2 top-4 z-[90] flex max-w-[92vw] -translate-x-1/2 items-center gap-3 rounded-2xl border-[3px] border-[var(--ink)] bg-[#ffe1e1] px-4 py-2.5 text-[var(--ink)] shadow-[0_4px_0_var(--ink)] animate-popIn"
-        >
-          <span>⚠️ {errorMessage}</span>
-          <button onClick={() => setErrorMessage(null)} className="icon-btn !h-8 !min-w-8 !px-0" aria-label="Dismiss">
-            ✕
-          </button>
+    <ThemeContext.Provider value={theme}>
+      <div className="relative min-h-screen w-full">
+        <CardDefs />
+        {/* The room and its scenery sit behind every screen. */}
+        <div className="bg-room fixed inset-0" aria-hidden="true">
+          <ThemeBackdrop />
         </div>
-      )}
 
-      {/* Screen Router */}
-      {screen === 'home' && (
-        <HomeMenu
-          name={profile.name}
-          avatar={profile.avatar}
-          onUpdateProfile={handleUpdateProfile}
-          onQuickPlay={handleQuickPlay}
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
-          onOpenRules={openRules}
-        />
-      )}
-
-      {screen === 'lobby' && !lobby && (
-        <div className="bg-room flex h-[100dvh] flex-col items-center justify-center gap-6 p-6 text-center">
-          <Logo className="w-64" />
-          <div className="panel flex items-center gap-3 px-6 py-4">
-            <span className="text-3xl animate-wiggle">🎲</span>
-            <span className="font-display text-xl">Finding the room…</span>
+        {/* Toast Error Alert */}
+        {errorMessage && (
+          <div
+            role="alert"
+            className="font-display fixed left-1/2 top-4 z-[90] flex max-w-[92vw] -translate-x-1/2 items-center gap-3 rounded-2xl border-[3px] border-[var(--ink)] bg-[#ffe1e1] px-4 py-2.5 text-[var(--ink)] shadow-[0_4px_0_var(--ink)] animate-popIn"
+          >
+            <span>⚠️ {errorMessage}</span>
+            <button onClick={() => setErrorMessage(null)} className="icon-btn !h-8 !min-w-8 !px-0" aria-label="Dismiss">
+              ✕
+            </button>
           </div>
-          <button onClick={handleLeave} className="icon-btn">
-            ← Back to menu
-          </button>
-        </div>
-      )}
+        )}
 
-      {screen === 'lobby' && lobby && (
-        <LobbyView
-          lobby={lobby}
-          yourSeat={yourSeat}
-          isHost={session?.isHost ?? false}
-          chatMessages={chatMessages}
-          onStartGame={handleStartGame}
-          onUpdateOptions={(opts) => session?.updateOptions?.(opts)}
-          onUpdateSeat={(idx, kind) => session?.updateSeat?.(idx, kind)}
-          onSendChat={(text) => session?.sendChat(text)}
-          onLeave={handleLeave}
-          onOpenRules={(m) => openRules(m)}
+        {/* Screen Router */}
+        {screen === 'home' && (
+          <HomeMenu
+            name={profile.name}
+            avatar={profile.avatar}
+            onUpdateProfile={handleUpdateProfile}
+            onQuickPlay={handleQuickPlay}
+            onCreateRoom={handleCreateRoom}
+            onJoinRoom={handleJoinRoom}
+            onOpenRules={openRules}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        )}
+
+        {screen === 'lobby' && !lobby && (
+          <div className="relative flex h-[100dvh] flex-col items-center justify-center gap-6 p-6 text-center">
+            <Logo className="w-64" />
+            <div className="panel flex items-center gap-3 px-6 py-4">
+              <span className="text-3xl animate-wiggle">🎲</span>
+              <span className="font-display text-xl">Finding the room…</span>
+            </div>
+            <button onClick={handleLeave} className="icon-btn">
+              ← Back to menu
+            </button>
+          </div>
+        )}
+
+        {screen === 'lobby' && lobby && (
+          <LobbyView
+            lobby={lobby}
+            yourSeat={yourSeat}
+            isHost={session?.isHost ?? false}
+            chatMessages={chatMessages}
+            onStartGame={handleStartGame}
+            onUpdateOptions={(opts) => session?.updateOptions?.(opts)}
+            onUpdateSeat={(idx, kind) => session?.updateSeat?.(idx, kind)}
+            onSendChat={(text) => session?.sendChat(text)}
+            onLeave={handleLeave}
+            onOpenRules={(m) => openRules(m)}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        )}
+
+        {screen === 'game' && view && (
+          <GameBoard
+            view={view}
+            isHost={session?.isHost ?? false}
+            roomId={lobby?.roomId}
+            chatMessages={chatMessages}
+            onAction={handleAction}
+            onTaunt={(id) => session?.sendTaunt(id)}
+            onLeave={handleLeave}
+            onNextRound={handleNextRound}
+            onNewGame={handleNewGame}
+            onOpenRules={() => openRules(view.mode)}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        )}
+
+        <RulesModal
+          open={rules.open}
+          mode={rules.mode}
+          focus={rules.focus}
+          onClose={() => setRules((r) => ({ ...r, open: false }))}
         />
-      )}
-
-      {screen === 'game' && view && (
-        <GameBoard
-          view={view}
-          isHost={session?.isHost ?? false}
-          roomId={lobby?.roomId}
-          chatMessages={chatMessages}
-          onAction={handleAction}
-          onSendChat={(text) => session?.sendChat(text)}
-          onLeave={handleLeave}
-          onNextRound={handleNextRound}
-          onNewGame={handleNewGame}
-          onOpenRules={() => openRules(view.mode)}
-        />
-      )}
-
-      <RulesModal
-        open={rules.open}
-        mode={rules.mode}
-        focus={rules.focus}
-        onClose={() => setRules((r) => ({ ...r, open: false }))}
-      />
-    </div>
+        <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} onOpenRules={() => openRules(view?.mode ?? 'classic')} />
+      </div>
+    </ThemeContext.Provider>
   );
 };

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { PublicPlayer } from '../../game/types';
 import { CardView } from '../CardView';
 import type { Reveal } from './useTableFx';
+import { Avatar } from '../Avatar';
 
 /** Spin: cards shown to everyone for a moment — Show Hand and War. */
 export function RevealOverlay({
@@ -38,20 +39,20 @@ export function RevealOverlay({
                   {reveal.cards.map((c) => (
                     <CardView key={c.id} card={c} width={reveal.cards.length > 12 ? 30 : 40} />
                   ))}
-                  {reveal.cards.length === 0 && <span className="text-sm text-[#6b6385]">No cards!</span>}
+                  {reveal.cards.length === 0 && <span className="text-sm text-[var(--muted)]">No cards!</span>}
                 </div>
               </>
             ) : (
               <>
                 <div className="font-display text-xl">⚔️ WAR!</div>
                 {reveal.plays.length === 0 ? (
-                  <p className="mt-1 text-sm text-[#6b6385]">Nobody has a number card. No war today.</p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">Nobody has a number card. No war today.</p>
                 ) : (
                   <div className="mt-2 flex flex-wrap justify-center gap-3">
                     {reveal.plays.map((p) => (
                       <div
                         key={p.player}
-                        className={`flex flex-col items-center rounded-xl px-1.5 py-1 ${p.player === reveal.winner ? 'bg-[#fff1a8] ring-2 ring-[var(--ink)]' : ''}`}
+                        className={`flex flex-col items-center rounded-xl px-1.5 py-1 ${p.player === reveal.winner ? 'bg-[var(--highlight)] ring-2 ring-[var(--ink)]' : ''}`}
                       >
                         <div className="flex -space-x-3">
                           {p.cards.map((c) => (
@@ -59,7 +60,7 @@ export function RevealOverlay({
                           ))}
                         </div>
                         <span className="font-display mt-1 max-w-[80px] truncate text-xs">
-                          {players[p.player]?.avatar} {name(p.player)}
+                          <Avatar value={players[p.player]?.avatar} /> {name(p.player)}
                         </span>
                       </div>
                     ))}
@@ -68,7 +69,7 @@ export function RevealOverlay({
                 {reveal.winner !== null ? (
                   <p className="font-display mt-2 text-base">{name(reveal.winner)} wins and discards!</p>
                 ) : (
-                  reveal.plays.length > 0 && <p className="mt-2 text-sm text-[#6b6385]">Still tied — nobody wins.</p>
+                  reveal.plays.length > 0 && <p className="mt-2 text-sm text-[var(--muted)]">Still tied — nobody wins.</p>
                 )}
               </>
             )}

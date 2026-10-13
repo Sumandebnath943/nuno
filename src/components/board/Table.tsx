@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { Color } from '../../game/types';
-import { COLOR_ORDER, FELT } from '../../lib/theme';
+import { COLOR_ORDER } from '../../lib/theme';
+import { useTheme } from '../../themes';
 
 interface Props {
   cx: number;
@@ -16,17 +17,20 @@ interface Props {
   dark?: boolean;
 }
 
-const NEUTRAL: [string, string, string] = ['#6a55d9', '#3f2f9c', '#231a5e'];
 const CHEVRONS = 30;
 
 /**
  * The oval table. The felt takes on the colour in play so you can read it at a glance,
  * and the chevrons printed around the rim show which way play is going.
+ * The rim, felt pattern and emblem come from the theme.
  */
 export const Table = memo(function Table({ cx, cy, rx, ry, color, direction, rainbow = false, dark = false }: Props) {
+  const theme = useTheme();
+  const { Overlay, Emblem } = theme.table;
   const inset = Math.min(34, ry * 0.16);
   const crx = rx - inset;
   const cry = ry - inset;
+  const emblem = Math.min(rx, ry) * 0.9;
 
   return (
     <div
@@ -39,19 +43,16 @@ export const Table = memo(function Table({ cx, cy, rx, ry, color, direction, rai
         className="absolute rounded-[50%]"
         style={{
           inset: -16,
-          background: dark
-            ? 'linear-gradient(180deg, #2a2433 0%, #0d0b12 100%)'
-            : 'linear-gradient(180deg, #3b2f86 0%, #241c5c 100%)',
-          transition: 'background 0.6s',
+          background: dark ? 'linear-gradient(180deg, #2a2433 0%, #0d0b12 100%)' : theme.table.rim,
           border: '4px solid var(--ink)',
-          boxShadow: '0 16px 0 rgba(10, 6, 30, 0.55), inset 0 4px 0 rgba(255,255,255,0.18)',
+          boxShadow: '0 16px 0 rgba(10, 6, 30, 0.55), inset 0 4px 0 rgba(255,255,255,0.18), inset 0 -6px 12px rgba(0,0,0,0.35)',
         }}
       />
       {/* felt */}
       <div className="absolute inset-0 overflow-hidden rounded-[50%]" style={{ border: '4px solid var(--ink)' }}>
-        <Felt colors={NEUTRAL} visible={!rainbow && color === null} />
+        <Felt colors={theme.neutralFelt} visible={!rainbow && color === null} />
         {COLOR_ORDER.map((c) => (
-          <Felt key={c} colors={FELT[c]} visible={!rainbow && color === c} />
+          <Felt key={c} colors={theme.felt[c]} visible={!rainbow && color === c} />
         ))}
         {rainbow && (
           <div
@@ -62,11 +63,22 @@ export const Table = memo(function Table({ cx, cy, rx, ry, color, direction, rai
             }}
           />
         )}
-        <div className="bg-dots absolute inset-0 opacity-60" />
+        {Overlay ? <Overlay /> : <div className="bg-dots absolute inset-0 opacity-60" />}
+        {Emblem && (
+          <svg
+            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            width={emblem}
+            height={emblem}
+            viewBox="-50 -50 100 100"
+            style={{ opacity: 0.13 }}
+          >
+            <Emblem />
+          </svg>
+        )}
         <div className="absolute rounded-[50%]" style={{ inset: inset - 12, border: '2px solid rgba(255,255,255,0.14)' }} />
       </div>
-      {/* direction chevrons */}
-      <svg className="absolute inset-0 overflow-visible" width={rx * 2} height={ry * 2}>
+      {/* direction chevrons: plain divs so the shimmer runs on the compositor */}
+      <div className="absolute inset-0" style={{ ['--chev' as string]: theme.table.chevron ?? '#fff' }}>
         {Array.from({ length: CHEVRONS }).map((_, i) => {
           const deg = 90 - (i * 360) / CHEVRONS; // i increases clockwise on screen
           const a = (deg * Math.PI) / 180;
@@ -77,22 +89,16 @@ export const Table = memo(function Table({ cx, cy, rx, ry, color, direction, rai
           const rot = direction === 1 ? tangent : tangent + 180;
           const order = direction === 1 ? i : CHEVRONS - i;
           return (
-            <g key={i} transform={`translate(${x} ${y})`}>
-              <g style={{ transform: `rotate(${rot}deg)`, transition: 'transform 0.7s cubic-bezier(.5,1.6,.5,1)' }}>
-                <path
-                  d="M -5 -7 L 3 0 L -5 7"
-                  fill="none"
-                  stroke="#fff"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ animation: `chevronWave 2.4s ease-in-out ${(order * 2.4) / CHEVRONS}s infinite` }}
-                />
-              </g>
-            </g>
+            <span
+              key={i}
+              className="chev"
+              style={{ left: x, top: y, transform: `rotate(${rot}deg)`, animationDelay: `${(order * 2.4) / CHEVRONS}s` }}
+            >
+              <i />
+            </span>
           );
         })}
-      </svg>
+      </div>
     </div>
   );
 });

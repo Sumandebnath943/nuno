@@ -27,6 +27,34 @@ Where a physical game leaves something to chance or doesn't say, NUNO had to pic
 
 ---
 
+## 🎨 Themes
+
+Pick a theme from the menu (or ⚙️ Settings, even mid-game). A theme restyles the whole app — room scenery, table, card backs and faces, fonts, particles, effects, sounds, soundtrack, bot names and trash talk — and adds its own twist. Themes are cosmetic and per player: everyone in an online room can use a different one.
+
+| Theme | Look | Its twist |
+| --- | --- | --- |
+| **Classic** | The original toy-box look | — |
+| **Hidden Leaf** (Naruto) | Sunset over a ninja village, falling leaves, swirl-and-headband backs | Shuriken and kunai fly at whoever gets hit, smoke-poof draws, ninja ranks from Academy to Hokage as your hand shrinks |
+| **Hero Academy** (My Hero Academia) | Comic halftones, hero city skyline, hazard-stripe table | SMASH-style comic impacts and speed lines, a live hero ranking |
+| **Grand Line** (One Piece) | Sunset at sea, WANTED-poster backs, ship-plank table and treasure-map felt | Cannonballs for draw cards, gold coin bursts, your bounty grows as you shed cards |
+| **Beyond the Walls** (Attack on Titan) | A colossal wall with a giant peeking over, winged-crest backs | Colour changes fire a signal flare in that colour, titan footsteps shake the table |
+| **Wisteria Night** (Demon Slayer) | Full moon and wisteria, checkered-haori backs and felt | Every colour is a Breathing Style (Water, Flame, Thunder, Wind…) with its own sword form; Slayer Corps ranks |
+| **Power Level** (Dragon Ball Z) | Rocky wasteland, star-orb backs, tournament-tile table | Ki blasts, beams for big draws, power levels, a golden aura at one card |
+
+### Adding character art
+
+Each theme can use your own pictures: a background, title art for the menu, two corner scenery sprites and any number of characters. Put the originals in `src/assets/characters/<theme>/` (characters go in a `characters/` subfolder) and run `npm run art` (Python 3 + Pillow). It trims, compresses and crops them into `src/generated/art/`, which is what the game loads — commit that folder. Characters become bot opponents named after them, pickable avatars (showing their face), and anime-style cut-ins of the whole figure when they play an action card or shout NUNO. Names and face crops are tuned in `src/assets/characters/art.json`; see [the folder's README](src/assets/characters/README.md). Only add art you have the right to use.
+
+## 💬 Trash talk
+
+Tap **Talk** on your name plate to fling a ready-made line at the table — it floats up from your seat with a sound for everyone to see. Every theme adds its own lines, and bots talk back now and then.
+
+## 🐢 Pace
+
+Bots wait until the table has finished showing the last move, then think. Big plays get a splash that says what happened in plain words ("Rex draws 2", "You miss a turn"), the 📜 log lists the last moves, and Settings has a Relaxed / Normal / Quick pace.
+
+---
+
 ## ✨ Features
 
 - **Strict Official Rules (No made-up rules)**:
@@ -50,11 +78,14 @@ Where a physical game leaves something to chance or doesn't say, NUNO had to pic
   - Every card moves: a real deal at the start of each round, draws fly from the deck to the player (face-up when they land in your hand), and plays fly onto the pile.
   - The table felt takes on the colour in play, and arrows printed on the rim show the direction of play.
   - Speech bubbles ("+4 😱", "Skipped!", "NUNO!") and big splashes for Skip, Reverse, +2, +4 and Wild.
-  - A big NUNO buzzer that lights up when it's time to shout, CATCH buttons when someone forgets, and emoji reactions.
+  - A big NUNO buzzer that lights up when it's time to shout, CATCH buttons when someone forgets, and trash talk.
+  - Hover a card (or tap it once on a phone) to read what it does; tap the discard pile to explain the top card.
 - **Card art**: every card is a crisp SVG in the classic style (tilted oval, outlined numbers, Skip/Reverse/+2 icons, quartered Wild, fanned Wild Draw Four).
 - **Works on any screen**: desktop, phones in portrait or landscape, 2 to 10 players. The menu fits without scrolling.
   - On phones: bigger cards, tap once to pick a card up and again to play it, big hands become a swipeable strip, menus open as bottom sheets, and the layout avoids the notch and home bar.
-- Procedural WebAudio sound effects (no audio files to load) and confetti.
+- Procedural WebAudio sound effects and soundtracks (no audio files to load): airhorns, sad trombones, slide whistles and more, plus a soundtrack per theme that picks up when someone is one card from winning. Separate effects and music volumes in Settings.
+- **How to play** covers every mode in full: your turn step by step, every special rule, every card in the deck with how many there are and what they score, the questions people ask, and scoring.
+- Built to stay smooth on phones: compositor-only animations, a canvas effects engine that sleeps when idle and lowers its particle count if frames drop, and no audio buffers allocated per sound.
 - Keyboard shortcuts: `D` draw, `K` keep the drawn card, `U`/`Space` shout NUNO, `S` sort your hand.
 
 ---
@@ -115,6 +146,7 @@ NUNO is configured as a client-side Single Page Application (SPA) powered by Vit
 - **Framework**: React 18, TypeScript (Strict ES2022)
 - **Styling**: Tailwind CSS + Custom Animations
 - **Multiplayer**: WebRTC P2P Data Channels via PeerJS
-- **Audio**: WebAudio API (Zero-asset procedural sound synthesis)
+- **Audio**: WebAudio API (zero-asset procedural sound synthesis and a small step sequencer for music)
+- **Effects**: a small canvas particle engine (`src/fx/engine.ts`) driven by the themes (`src/themes/`)
 - **Visuals**: SVG card art, Framer Motion card flights, Canvas Confetti
 - **Testing**: Vitest (100% test coverage for official rules)

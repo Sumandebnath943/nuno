@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  /* Classic values; the active theme overrides them at runtime (see src/themes). */
   --ink: #1b1530;
   --cream: #fff8ea;
   --red: #e8333a;
@@ -10,8 +11,24 @@
   --green: #2eb34f;
   --blue: #2f72e0;
   --night: #17143d;
+  --muted: #6b6385;
+  --soft: #4d4566;
+  --faint: #9a93ad;
+  --panel-2: #efe6d2;
+  --panel-3: #f1ebdd;
+  --line: #e3d9c3;
+  --highlight: #fff1a8;
+  --chip-hover: #fff6d6;
+  --link: #6d4ce6;
+  --accent-a: #ffe066;
+  --accent-b: #ffb703;
+  --surface: #ffffff;
+  --turn-bg: #fff1a8;
+  --ring: rgba(255, 224, 102, 0.95);
   --font-display: 'Lilita One', system-ui, sans-serif;
+  --font-card: 'Lilita One', system-ui, sans-serif;
   --font-body: 'Fredoka', system-ui, sans-serif;
+  --panel-bg: var(--cream);
 }
 
 * {
@@ -50,10 +67,12 @@ textarea {
 /* ── backgrounds ─────────────────────────────────────────── */
 
 .bg-room {
-  background:
+  background: var(
+    --room-bg,
     radial-gradient(ellipse at 50% 45%, rgba(120, 90, 255, 0.28) 0%, rgba(0, 0, 0, 0) 60%),
-    repeating-conic-gradient(from 0deg at 50% 45%, rgba(255, 255, 255, 0.035) 0deg 9deg, rgba(255, 255, 255, 0) 9deg 18deg),
-    linear-gradient(180deg, #241d63 0%, #17143d 60%, #100d2b 100%);
+    linear-gradient(180deg, #241d63 0%, #17143d 60%, #100d2b 100%)
+  );
+  transition: background 0.4s;
 }
 
 .bg-dots {
@@ -81,8 +100,12 @@ textarea {
 .nuno-card.is-glow {
   box-shadow:
     0 0 0 3px #fff36b,
-    0 0 22px 6px rgba(255, 230, 80, 0.75),
-    0 10px 18px rgba(5, 3, 20, 0.5);
+    0 0 18px 5px rgba(255, 230, 80, 0.7),
+    0 8px 14px rgba(5, 3, 20, 0.45);
+}
+/* Tiny cards (opponents' fans, previews) don't need a soft shadow. */
+.nuno-card.is-mini {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 
 .nuno-card.is-dim {
@@ -128,12 +151,12 @@ textarea {
 /* ── chunky buttons ──────────────────────────────────────── */
 
 .btn {
-  font-family: var(--font-display);
+  font-family: var(--font-ui, var(--font-display));
   letter-spacing: 0.03em;
   border: 3px solid var(--ink);
   border-radius: 16px;
   color: var(--ink);
-  background: #fff;
+  background: var(--surface);
   box-shadow:
     inset 0 -4px 0 rgba(0, 0, 0, 0.14),
     inset 0 3px 0 rgba(255, 255, 255, 0.45),
@@ -174,7 +197,7 @@ textarea {
 }
 
 .btn-yellow {
-  background: linear-gradient(#ffe066, #ffb703);
+  background: linear-gradient(var(--accent-a), var(--accent-b));
 }
 .btn-red {
   background: linear-gradient(#ff6b6f, #e0262e);
@@ -197,7 +220,7 @@ textarea {
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
 }
 .btn-white {
-  background: linear-gradient(#ffffff, #e9e4f5);
+  background: linear-gradient(var(--surface), var(--panel-3));
 }
 
 /* small square icon buttons used in bars */
@@ -211,9 +234,9 @@ textarea {
   padding: 0 10px;
   border-radius: 12px;
   border: 2.5px solid var(--ink);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
-  font-family: var(--font-display);
+  font-family: var(--font-ui, var(--font-display));
   font-size: 14px;
   box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
@@ -230,15 +253,15 @@ textarea {
   box-shadow: 0 0 0 var(--ink);
 }
 .icon-btn.is-on {
-  background: #ffe066;
+  background: var(--accent-a);
 }
 
 /* selectable chips (segmented controls) */
 .chip {
-  font-family: var(--font-display);
+  font-family: var(--font-ui, var(--font-display));
   border: 2.5px solid var(--ink);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
@@ -248,21 +271,21 @@ textarea {
     background 0.15s;
 }
 .chip:hover {
-  background: #fff6d6;
+  background: var(--chip-hover);
 }
 .chip:active {
   transform: translateY(3px);
   box-shadow: 0 0 0 var(--ink);
 }
 .chip.is-on {
-  background: linear-gradient(#ffe066, #ffbf1f);
+  background: linear-gradient(var(--accent-a), var(--accent-b));
   transform: translateY(2px);
   box-shadow: 0 1px 0 var(--ink);
 }
 
 /* cream "toy box" panel */
 .panel {
-  background: var(--cream);
+  background: var(--panel-bg);
   color: var(--ink);
   border: 3px solid var(--ink);
   border-radius: 24px;
@@ -270,7 +293,7 @@ textarea {
 }
 
 .field {
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   border: 2.5px solid var(--ink);
   border-radius: 12px;
@@ -278,18 +301,18 @@ textarea {
   outline: none;
 }
 .field:focus {
-  box-shadow: 0 0 0 3px #ffc21a;
+  box-shadow: 0 0 0 3px var(--accent-b);
 }
 .field::placeholder {
-  color: #9a93ad;
+  color: var(--faint);
 }
 
 .label {
-  font-family: var(--font-display);
+  font-family: var(--font-ui, var(--font-display));
   font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #6b6385;
+  color: var(--muted);
 }
 
 /* outlined display text, works on any background */
@@ -368,10 +391,12 @@ textarea {
 }
 @keyframes pulseRing {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 224, 102, 0.9);
+    transform: scale(1);
+    opacity: 0.95;
   }
   100% {
-    box-shadow: 0 0 0 16px rgba(255, 224, 102, 0);
+    transform: scale(1.38);
+    opacity: 0;
   }
 }
 @keyframes buzz {
@@ -429,7 +454,16 @@ textarea {
 .animate-shake {
   animation: shake 0.45s ease-in-out infinite;
 }
-.animate-pulseRing {
+/* The ring is a pseudo element that scales and fades: no repaints, so it
+   doesn't keep phones busy (and hot) for as long as it is someone's turn. */
+.animate-pulseRing::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 3px solid var(--ring);
+  pointer-events: none;
+  will-change: transform, opacity;
   animation: pulseRing 1.1s ease-out infinite;
 }
 .animate-buzz {
@@ -544,4 +578,257 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* ── modals ──────────────────────────────────────────────── */
+
+.modal-wrap {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+/* Blurring everything behind a sheet is costly on phones; the dim is enough. */
+@media (hover: none) {
+  .modal-wrap {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* ── table direction chevrons ────────────────────────────── */
+
+.chev {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  opacity: 0.2;
+  will-change: opacity;
+  animation: chevronWave 2.4s ease-in-out infinite;
+  transition: transform 0.7s cubic-bezier(0.5, 1.6, 0.5, 1);
+}
+.chev > i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-top: 3.5px solid var(--chev, #fff);
+  border-right: 3.5px solid var(--chev, #fff);
+  border-radius: 2px;
+  transform: translateX(-2px) rotate(45deg);
+}
+
+/* ── theme auras on avatars ──────────────────────────────── */
+
+@keyframes auraFlicker {
+  from {
+    transform: scale(0.97);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+@keyframes auraSpin {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+  to {
+    transform: rotate(360deg) scale(1.08);
+  }
+}
+[class*='aura-']::before {
+  content: '';
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 50%, var(--aura) 57%, transparent 72%);
+  will-change: transform, opacity;
+  animation: auraFlicker 0.55s ease-in-out infinite alternate;
+}
+.aura-chakra {
+  --aura: rgba(77, 171, 247, 0.9);
+}
+.aura-fox {
+  --aura: rgba(255, 120, 30, 0.95);
+}
+.aura-hero {
+  --aura: rgba(255, 214, 0, 0.9);
+}
+.aura-plus {
+  --aura: rgba(229, 57, 53, 0.95);
+}
+.aura-gold {
+  --aura: rgba(255, 202, 40, 0.95);
+}
+.aura-steam {
+  --aura: rgba(245, 240, 230, 0.9);
+}
+.aura-breath {
+  --aura: rgba(209, 167, 255, 0.95);
+}
+.aura-flame {
+  --aura: rgba(255, 112, 67, 0.95);
+}
+.aura-ki {
+  --aura: rgba(255, 245, 157, 0.95);
+}
+.aura-super {
+  --aura: rgba(255, 214, 0, 1);
+}
+.aura-super::before {
+  inset: -22px;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 0, 0.95) 0deg 7deg, rgba(255, 245, 157, 0) 7deg 20deg);
+  -webkit-mask-image: radial-gradient(circle, transparent 46%, #000 54%, transparent 72%);
+  mask-image: radial-gradient(circle, transparent 46%, #000 54%, transparent 72%);
+  animation: auraSpin 1.6s linear infinite;
+}
+
+/* ── trash talk ──────────────────────────────────────────── */
+
+@keyframes tauntRise {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.55);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0) scale(1.1);
+  }
+  18% {
+    transform: translateY(-4px) scale(1);
+  }
+  82% {
+    opacity: 1;
+    transform: translateY(-44px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-66px) scale(0.96);
+  }
+}
+.taunt-float {
+  animation: tauntRise 3.4s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+/* ── card help on hover (desktop) ────────────────────────── */
+
+.card-tip {
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .hand-slot:hover .card-tip {
+    opacity: 1;
+    transform: translate(-50%, 0);
+    transition-delay: 0.45s;
+  }
+}
+
+/* ── themed splash text ──────────────────────────────────── */
+
+.splash-kicker {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+/* Text inside panels uses the UI font, so very wide theme fonts don't overflow menus. */
+.panel .font-display {
+  font-family: var(--font-ui, var(--font-display));
+}
+.panel h2.font-display,
+.panel h3.font-display {
+  font-family: var(--font-display);
+}
+
+/* Fonts with tall glyphs need a little more room inside pills. */
+[data-theme='demonslayer'] .font-display {
+  letter-spacing: 0;
+  font-weight: 800;
+}
+[data-theme='mha'] .font-display,
+[data-theme='onepiece'] .font-display {
+  letter-spacing: 0.04em;
+}
+
+/* Tailwind's max-* variants are off here (custom raw screens), so a plain rule. */
+@media (max-width: 639px) {
+  .hide-on-phone {
+    display: none;
+  }
+}
+
+/* ── character cut-ins ───────────────────────────────────── */
+
+@keyframes cutBand {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  14% {
+    transform: scaleX(1);
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+@keyframes cutInLeft {
+  0% {
+    transform: translateX(-70%);
+    opacity: 0;
+  }
+  18% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  80% {
+    transform: translateX(5%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(14%);
+    opacity: 0;
+  }
+}
+@keyframes cutInRight {
+  0% {
+    transform: translateX(70%);
+    opacity: 0;
+  }
+  18% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  80% {
+    transform: translateX(-5%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-14%);
+    opacity: 0;
+  }
+}
+.cutin-band {
+  animation: cutBand var(--cut-ms, 1200ms) ease-out both;
+  will-change: transform, opacity;
+}
+.cutin-img.from-left {
+  animation: cutInLeft var(--cut-ms, 1200ms) cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+.cutin-img.from-right {
+  animation: cutInRight var(--cut-ms, 1200ms) cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+.cutin-name {
+  animation: fadeIn 0.2s 0.15s ease-out both;
 }

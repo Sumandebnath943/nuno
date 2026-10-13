@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "art": "python scripts/build-art.py"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

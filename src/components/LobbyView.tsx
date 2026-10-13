@@ -5,6 +5,8 @@ import { MODES } from '../game/modes';
 import { Logo } from './ui';
 import { ModeButton, ModePicker } from './ModePicker';
 import { sfx } from '../lib/sound';
+import { AmbientCanvas } from './ThemeStage';
+import { Avatar } from './Avatar';
 
 interface Props {
   lobby: LobbyState;
@@ -17,6 +19,7 @@ interface Props {
   onSendChat: (text: string) => void;
   onLeave: () => void;
   onOpenRules: (mode: GameMode) => void;
+  onOpenSettings: () => void;
 }
 
 const DIFFICULTIES: { id: Difficulty; label: string }[] = [
@@ -36,6 +39,7 @@ export const LobbyView: React.FC<Props> = ({
   onSendChat,
   onLeave,
   onOpenRules,
+  onOpenSettings,
 }) => {
   const [chatInput, setChatInput] = useState('');
   const [picking, setPicking] = useState(false);
@@ -85,9 +89,10 @@ export const LobbyView: React.FC<Props> = ({
   };
 
   return (
-    <div className="bg-room flex h-[100dvh] w-full flex-col overflow-hidden">
+    <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden">
+      <AmbientCanvas />
       {/* Header */}
-      <header className="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4">
+      <header className="relative flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4">
         <div className="flex items-center gap-3">
           <Logo animated={false} className="w-24 sm:w-32" />
           <div className="panel flex items-center gap-2 !rounded-2xl px-3 py-1 !shadow-[0_4px_0_var(--ink)]">
@@ -99,20 +104,23 @@ export const LobbyView: React.FC<Props> = ({
           <button onClick={copyInvite} className="btn btn-purple h-11 px-4 text-base">
             {copied ? '✓ Link copied' : '🔗 Copy invite link'}
           </button>
+          <button onClick={onOpenSettings} className="icon-btn !h-11" aria-label="Settings" title="Theme, pace & sound">
+            ⚙️
+          </button>
           <button onClick={onLeave} className="icon-btn !h-11">
             🚪 <span className="hidden sm:inline">Leave</span>
           </button>
         </div>
       </header>
 
-      <main className="nice-scroll mx-auto grid min-h-0 w-full max-w-6xl flex-1 gap-4 overflow-y-auto px-3 pb-4 sm:px-4 lg:grid-cols-[1fr_340px]">
+      <main className="nice-scroll relative mx-auto grid min-h-0 w-full max-w-6xl flex-1 gap-4 overflow-y-auto px-3 pb-4 sm:px-4 lg:grid-cols-[1fr_340px]">
         {/* Seats + options */}
         <section className="panel flex min-h-0 flex-col p-4 sm:p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-2xl">
-              Players <span className="text-[#9a93ad]">({lobby.seats.length})</span>
+              Players <span className="text-[var(--faint)]">({lobby.seats.length})</span>
             </h2>
-            <p className="text-sm font-medium text-[#6b6385]">
+            <p className="text-sm font-medium text-[var(--muted)]">
               {humans === 1 ? 'Share the link! Friends who join take a bot’s seat.' : `${humans} humans at the table`}
             </p>
           </div>
@@ -124,17 +132,17 @@ export const LobbyView: React.FC<Props> = ({
                 <div
                   key={idx}
                   className={`flex items-center gap-3 rounded-2xl border-[2.5px] border-[var(--ink)] px-3 py-2 ${
-                    isMe ? 'bg-[#fff1a8]' : seat.kind === 'bot' ? 'bg-[#f1ebdd]' : 'bg-white'
+                    isMe ? 'bg-[var(--highlight)]' : seat.kind === 'bot' ? 'bg-[var(--panel-3)]' : 'bg-[var(--surface)]'
                   }`}
                 >
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[var(--ink)] bg-white text-2xl">
-                    {seat.avatar}
+                  <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--surface)] text-2xl">
+                    <Avatar value={seat.avatar} fill />
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="font-display truncate text-lg leading-tight">{seat.name}</div>
-                    <div className="flex gap-1.5 text-xs font-semibold text-[#6b6385]">
+                    <div className="flex gap-1.5 text-xs font-semibold text-[var(--muted)]">
                       {idx === 0 && <Tag className="bg-[var(--yellow)]">Host</Tag>}
-                      {isMe && <Tag className="bg-white">You</Tag>}
+                      {isMe && <Tag className="bg-[var(--surface)]">You</Tag>}
                       {seat.kind === 'bot' ? <span>🤖 Bot · seat open</span> : idx !== 0 && <span>🌐 Online</span>}
                     </div>
                   </div>
@@ -152,7 +160,7 @@ export const LobbyView: React.FC<Props> = ({
             })}
           </div>
 
-          <div className="mt-5 border-t-2 border-dashed border-[#d8ccb1] pt-4">
+          <div className="mt-5 border-t-2 border-dashed border-[var(--line)] pt-4">
             <OptionGroup label="Game mode">
               <div className="max-w-md">
                 <ModeButton mode={mode} onClick={() => (isHost ? setPicking(true) : onOpenRules(mode))} />
@@ -160,7 +168,7 @@ export const LobbyView: React.FC<Props> = ({
               {!isHost && (
                 <button
                   onClick={() => onOpenRules(mode)}
-                  className="mt-1.5 text-xs font-bold text-[#6d4ce6] underline underline-offset-2"
+                  className="mt-1.5 text-xs font-bold text-[var(--link)] underline underline-offset-2"
                 >
                   How to play {MODES[mode].name}
                 </button>
@@ -229,19 +237,21 @@ export const LobbyView: React.FC<Props> = ({
             <h3 className="font-display px-1 text-xl">Chat</h3>
             <div className="nice-scroll mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
               {chatMessages.length === 0 ? (
-                <p className="px-1 pt-6 text-center text-sm font-medium text-[#9a93ad]">Say hi! Trash talk is encouraged.</p>
+                <p className="px-1 pt-6 text-center text-sm font-medium text-[var(--faint)]">Say hi! Trash talk is encouraged.</p>
               ) : (
                 chatMessages.map((m) =>
                   m.isSystem ? (
-                    <div key={m.id} className="px-1 text-center text-xs font-semibold text-[#8a6fd6]">
+                    <div key={m.id} className="px-1 text-center text-xs font-semibold text-[var(--link)]">
                       {m.text}
                     </div>
                   ) : (
-                    <div key={m.id} className="flex items-start gap-2 rounded-xl bg-white px-2 py-1.5 text-sm">
-                      <span className="text-lg leading-none">{m.avatar}</span>
+                    <div key={m.id} className="flex items-start gap-2 rounded-xl bg-[var(--surface)] px-2 py-1.5 text-sm">
+                      <span className="text-lg leading-none">
+                        <Avatar value={m.avatar} />
+                      </span>
                       <div className="min-w-0">
                         <span className="font-display">{m.sender}</span>
-                        <p className="break-words font-medium text-[#4d4566]">{m.text}</p>
+                        <p className="break-words font-medium text-[var(--soft)]">{m.text}</p>
                       </div>
                     </div>
                   ),

@@ -29,8 +29,8 @@ export const BOT_PERSONAS: BotPersona[] = [
   { name: 'Alien Al', avatar: '👽' },
 ];
 
-export function pickPersonas(count: number, exclude: string[] = []): BotPersona[] {
-  const pool = BOT_PERSONAS.filter((p) => !exclude.includes(p.avatar));
+export function pickPersonas(count: number, exclude: string[] = [], personas: BotPersona[] = BOT_PERSONAS): BotPersona[] {
+  const pool = personas.filter((p) => !exclude.includes(p.avatar) && !exclude.includes(p.name));
   const out: BotPersona[] = [];
   const copy = pool.slice();
   while (out.length < count && copy.length) {
@@ -56,9 +56,9 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sayUnoChance: 0.75,
     lateUnoChance: 0.4,
     catchChance: 0.35,
-    catchDelay: [1800, 3200],
+    catchDelay: [1900, 3300],
     bluffChance: 0,
-    thinkMs: [900, 1600],
+    thinkMs: [1000, 1700],
     stackChance: 0.6,
     raceDelay: [1400, 3200],
   },
@@ -66,9 +66,9 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sayUnoChance: 0.88,
     lateUnoChance: 0.5,
     catchChance: 0.6,
-    catchDelay: [1300, 2600],
+    catchDelay: [1400, 2700],
     bluffChance: 0.06,
-    thinkMs: [750, 1350],
+    thinkMs: [800, 1350],
     stackChance: 0.85,
     raceDelay: [1000, 2400],
   },
@@ -76,9 +76,9 @@ export const TUNING: Record<Difficulty, Tuning> = {
     sayUnoChance: 0.97,
     lateUnoChance: 0.7,
     catchChance: 0.9,
-    catchDelay: [900, 2000],
+    catchDelay: [1000, 2100],
     bluffChance: 0.15,
-    thinkMs: [600, 1100],
+    thinkMs: [600, 1050],
     stackChance: 1,
     raceDelay: [700, 1700],
   },

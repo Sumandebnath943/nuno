@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Card, Color, PickKind, Side } from '../../game/types';
 import { COLOR_NAMES, isNumberCard, sortHand } from '../../game/cards';
 import { palette } from '../../game/modes';
-import { CARD_COLORS } from '../../lib/theme';
+import { useTheme } from '../../themes';
 import { CardView } from '../CardView';
 import { Modal } from '../ui';
 import { sfx } from '../../lib/sound';
@@ -24,6 +24,7 @@ const TITLES: Record<PickKind, [string, string]> = {
 
 /** Spin: choose which cards to discard, then which one ends up on top. */
 export function WheelPickModal({ open, kind, hand, side, onDone }: Props) {
+  const pal = useTheme().cardColors;
   const cards = useMemo(() => sortHand(hand), [hand]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [step, setStep] = useState<'select' | 'top'>('select');
@@ -85,7 +86,7 @@ export function WheelPickModal({ open, kind, hand, side, onDone }: Props) {
     <Modal open={open} className="max-w-xl">
       <div className="p-4 sm:p-5">
         <h2 className="font-display text-center text-3xl">{step === 'top' ? 'Which card goes on top?' : title}</h2>
-        <p className="mt-1 text-center text-sm font-medium text-[#6b6385]">
+        <p className="mt-1 text-center text-sm font-medium text-[var(--muted)]">
           {step === 'top' ? 'The next player has to match the top card.' : sub}
         </p>
 
@@ -122,14 +123,14 @@ export function WheelPickModal({ open, kind, hand, side, onDone }: Props) {
                 onClick={() => (sfx.click(), setColor(col))}
                 aria-label={COLOR_NAMES[col]}
                 className={`h-9 w-9 rounded-full border-[3px] border-[var(--ink)] transition-transform ${color === col ? 'scale-125 shadow-[0_0_0_3px_#fff]' : ''}`}
-                style={{ background: CARD_COLORS[col].base }}
+                style={{ background: pal[col].base }}
               />
             ))}
           </div>
         )}
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <span className="font-display text-sm text-[#6b6385]">
+          <span className="font-display text-sm text-[var(--muted)]">
             {kind === 'keep2' ? `Keeping ${selected.size}/2 · discarding ${discards.length}` : `Discarding ${discards.length}`}
           </span>
           <button

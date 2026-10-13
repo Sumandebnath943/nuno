@@ -4,16 +4,24 @@
 //  from the deck to the player, and the round opens with a real deal.
 //  The game state itself is untouched — this only decides what the
 //  table *shows* while cards are in the air.
+//
+//  Timings come from game/timing.ts, which the host also uses to hold
+//  the bots, so a bot never moves before the last move has been shown.
 // ─────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Card, Color, DistributiveOmit, GameEvent, GameMode, GameView, WheelSegment } from '../../game/types';
 import { COLOR_NAMES } from '../../game/cards';
 import { drawValue, isStackable } from '../../game/modes';
-import { dealStagger, FLIGHT_MS, WHEEL_SPIN_MS } from '../../game/timing';
+import { dealStagger, drawGap, eventBeat, flightMs, splashMs, WHEEL_SPIN_MS } from '../../game/timing';
 import { sfx } from '../../lib/sound';
 import { buzz } from '../../lib/haptics';
 import { WHEEL_INFO } from '../../lib/modeGuide';
+import { currentTheme, playFx } from '../../themes';
+import type { MoveKey } from '../../themes/types';
+import type { Pt } from '../../fx/engine';
 import { pileJitter } from './layout';
+import { avatarImage } from '../../themes/characters';
+import type { CutInData } from './CutIn';
 
 export interface Box {
   x: number; // centre
@@ -43,7 +51,10 @@ export interface Splash {
   id: number;
   text: string;
   color?: Color | 'wild';
+  /** What it means, in plain words ("Rex draws 2"). */
   small?: string;
+  /** The theme's flavour line above the big text ("Substitution Jutsu"). */
+  kicker?: string;
 }
 
 /** Cards shown to everyone for a moment (Spin: Show Hand and War). */
@@ -67,41 +78,43 @@ export interface Anchors {
   hand: HTMLElement | null;
 }
 
-const DRAW_GAP = 130;
 export { WHEEL_SPIN_MS };
 
-/** Big centre text for an action card. */
-function actionSplash(card: Card, mode: GameMode): { text: string; plus?: number } | null {
+const ATTACKS = new Set(['draw2', 'wild4', 'stack', 'card', 'challenge', 'roulette', 'start']);
+
+/** Big centre text for an action card, and which theme move it is. */
+function actionSplash(card: Card, mode: GameMode): { text: string; plus?: number; move?: MoveKey } | null {
   // No Mercy draw cards announce themselves through the stack instead.
   if (mode === 'nomercy' && isStackable(card.value)) return null;
   const d = drawValue(card.value);
+  if (card.spin) return { text: 'SPIN!' };
   switch (card.value) {
     case 'skip':
     case 'wildSkip':
-      return { text: 'SKIP!' };
+      return { text: 'SKIP!', move: 'skip' };
     case 'wildSkip2':
-      return { text: 'SKIP ×2!' };
+      return { text: 'SKIP ×2!', move: 'skip' };
     case 'hit2':
-      return { text: 'HIT 2!' };
+      return { text: 'HIT 2!', move: 'launch' };
     case 'wild':
-      return mode === 'allwild' ? null : { text: 'WILD!' };
+      return mode === 'allwild' ? null : { text: 'WILD!', move: 'wild' };
     case 'wildDrawColor':
-      return { text: 'DRAW COLOR!', plus: 4 };
+      return { text: 'DRAW COLOR!', plus: 4, move: 'bigDraw' };
     case 'wildRoulette':
-      return { text: 'ROULETTE!' };
+      return { text: 'ROULETTE!', move: 'wild' };
     case 'wildAllHit':
-      return { text: 'ALL HIT!' };
+      return { text: 'ALL HIT!', move: 'launch' };
     case 'wildHitFire':
-      return { text: 'HIT-FIRE!' };
+      return { text: 'HIT-FIRE!', move: 'launch' };
     case 'tradeHands':
     case 'wildSwap':
-      return { text: 'SWAP!' };
+      return { text: 'SWAP!', move: 'swap' };
     case 'discardAll':
-      return { text: 'DISCARD ALL!' };
+      return { text: 'DISCARD ALL!', move: 'discardAll' };
     case 'wildTargetDraw2':
-      return { text: '+2 🎯', plus: 2 };
+      return { text: '+2 🎯', plus: 2, move: 'draw' };
     default:
-      return d ? { text: `+${d}`, plus: d } : null;
+      return d ? { text: `+${d}`, plus: d, move: d >= 4 ? 'bigDraw' : 'draw' } : null;
   }
 }
 
@@ -116,10 +129,12 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [wheelSpin, setWheelSpin] = useState<WheelSpin | null>(null);
   const [launcherShots, setLauncherShots] = useState(0);
+  const [cutIn, setCutIn] = useState<CutInData | null>(null);
   const [fxColor, setFxColor] = useState<Color | null>(() => (view.phase === 'chooseColor' ? null : view.currentColor));
   const [settled, setSettled] = useState(true);
 
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // Pending timers. Each removes itself when it fires, so long games don't pile them up.
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const cursor = useRef(0);
   const lastSeq = useRef<number | null>(null);
   const prevHand = useRef<Set<string>>(new Set());
@@ -136,8 +151,9 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
   useEffect(
     () => () => {
       timers.current.forEach(clearTimeout);
-      timers.current = [];
+      timers.current.clear();
       landers.current.clear();
+      playRects.current.clear();
       lastSeq.current = null;
       prevHand.current = new Set();
       cursor.current = 0;
@@ -151,21 +167,46 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
   );
 
   const at = (ms: number, fn: () => void) => {
-    timers.current.push(setTimeout(fn, Math.max(0, ms)));
+    const h = setTimeout(() => {
+      timers.current.delete(h);
+      fn();
+    }, Math.max(0, ms));
+    timers.current.add(h);
   };
 
   const bump = (seat: number, by: number) => setCountDelta((d) => ({ ...d, [seat]: (d[seat] ?? 0) + by }));
 
-  const showBubble = useCallback((seat: number, text: string, tone: BubbleTone = 'info', ms = 1700) => {
+  const showBubble = useCallback((seat: number, text: string, tone: BubbleTone = 'info', ms = 2100) => {
     const id = ++uid.current;
     setBubbles((b) => ({ ...b, [seat]: { id, text, tone } }));
     setTimeout(() => setBubbles((b) => (b[seat]?.id === id ? omit(b, seat) : b)), ms);
   }, []);
 
-  const showSplash = (text: string, color?: Splash['color'], small?: string) => {
+  const showSplash = (text: string, color?: Splash['color'], small?: string, kicker?: string) => {
     const id = ++uid.current;
-    setSplash({ id, text, color, small });
-    setTimeout(() => setSplash((s) => (s?.id === id ? null : s)), 1150);
+    setSplash({ id, text, color, small, kicker });
+    setTimeout(() => setSplash((s) => (s?.id === id ? null : s)), splashMs() + (small ? 300 : 0));
+  };
+
+  /** A character portrait sliding in, for players whose avatar is a character picture. */
+  const showCutIn = (seat: number) => {
+    const art = avatarImage(viewRef.current.players[seat]?.avatar);
+    if (!art) return;
+    const id = ++uid.current;
+    const ms = Math.round(splashMs() * 0.9);
+    setCutIn({
+      id,
+      url: art.url,
+      name: art.full,
+      w: art.w,
+      h: art.h,
+      srcW: art.srcW,
+      srcH: art.srcH,
+      cut: art.cut,
+      side: seat === me ? 'left' : 'right',
+      ms,
+    });
+    setTimeout(() => setCutIn((c) => (c?.id === id ? null : c)), ms + 50);
   };
 
   const showReveal = (r: DistributiveOmit<Reveal, 'id'>, ms: number) => {
@@ -195,6 +236,11 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
     const j = pileJitter(cardId);
     return { x: b.x + j.dx, y: b.y + j.dy, w: b.w, rot: j.rot };
   };
+  const center = (): Pt => ({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  const pt = (b: Box | null): Pt => (b ? { x: b.x, y: b.y } : center());
+  const seatPt = (seat: number) => pt(seatBox(seat));
+  const pilePt = () => pt(boxOf(anchors.current.discard));
+  const deckPt = () => pt(deckBox());
 
   const launch = (
     card: Flight['card'],
@@ -202,7 +248,7 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
     from: Box | null,
     to: Box | null,
     onLand: () => void,
-    duration = FLIGHT_MS,
+    duration = flightMs(),
   ) => {
     // Hidden tabs don't animate: skip straight to the landing.
     if (!from || !to || document.hidden) {
@@ -227,6 +273,8 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
 
   const rememberPlay = useCallback((cardId: string, rect: DOMRect) => {
     playRects.current.set(cardId, rect);
+    // Forget it if the play never happens (e.g. the server refused it).
+    setTimeout(() => playRects.current.delete(cardId), 4000);
   }, []);
 
   // ── the timeline ─────────────────────────────────────────
@@ -271,15 +319,61 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
     let t = Math.max(0, cursor.current - now);
     // If we fall far behind (e.g. a tab was in the background), catch up quickly.
     const fast = t > 2500;
-    const flightMs = fast ? 220 : FLIGHT_MS;
+    const flight = fast ? 220 : flightMs();
+    const n = view.players.length;
+    const beat = (ev: GameEvent) => eventBeat(ev, n, fast);
     const queue = [...added];
     const hideHand: string[] = [];
     const hideDiscard: string[] = [];
-    const n = view.players.length;
+    const theme = currentTheme();
+    const moves = theme.moves ?? {};
     const nameOf = (i: number) => (i === me ? 'You' : (view.players[i]?.name ?? 'Someone'));
+    const verb = (i: number, you: string, they: string) => `${nameOf(i)} ${i === me ? you : they}`;
+    const colorWord = (c: Color) => {
+      const alias = theme.colorAlias?.[c];
+      return alias ? `${COLOR_NAMES[c]} · ${alias}` : `${COLOR_NAMES[c]} it is!`;
+    };
     const myCard = (id: string) => view.myHand.find((c) => c.id === id) ?? null;
     // UNO Flip has no card backs: show the side everyone else can see.
     const oppFace = (seat: number, idx: number) => (view.mode === 'flip' ? (view.players[seat]?.altFaces?.[idx] ?? null) : null);
+    let lastPlayer: number | null = null;
+    const hitVictims = new Set<number>();
+
+    /** What a card did, in plain words, from the events that follow it. */
+    const consequence = (i: number, card: Card, player: number, target?: number): string | undefined => {
+      const after: GameEvent[] = [];
+      for (let k = i + 1; k < fresh.length && fresh[k].type !== 'play'; k++) after.push(fresh[k]);
+      const skipped = after.filter((e): e is Extract<GameEvent, { type: 'skip' }> => e.type === 'skip').map((e) => e.player);
+      const drew = after.find((e): e is Extract<GameEvent, { type: 'draw' }> => e.type === 'draw' && ATTACKS.has(e.reason));
+      const next = view.phase === 'challenge' && view.challenge ? view.challenge.target : view.current;
+      if (card.spin) return verb(next, 'spin the wheel!', 'spins the wheel!');
+      switch (card.value) {
+        case 'skip':
+        case 'wildSkip':
+        case 'wildSkip2':
+          return skipped.length ? skipped.map(nameOf).join(' & ') + (skipped.length > 1 || skipped[0] === me ? ' miss a turn' : ' misses a turn') : undefined;
+        case 'tradeHands':
+        case 'wildSwap':
+          return target !== undefined ? `${nameOf(player)} ⇄ ${nameOf(target)}` : undefined;
+        case 'wildTargetDraw2':
+          return target !== undefined ? verb(target, 'draw 2!', 'draws 2') : undefined;
+        case 'hit2':
+          return verb(next, 'hit the launcher twice', 'hits the launcher twice');
+        case 'wildAllHit':
+          return 'Everyone else hits the launcher';
+        case 'wildHitFire':
+          return verb(next, 'hit until it fires!', 'hits until it fires');
+        case 'wildRoulette':
+          return verb(next, 'name a colour…', 'names a colour…');
+        case 'discardAll':
+          return `All ${COLOR_NAMES[card.color as Color] ?? ''} cards go with it`;
+        default:
+          break;
+      }
+      if (drew) return verb(drew.player, `draw ${drew.count}!`, `draws ${drew.count}`);
+      if (view.phase === 'challenge' && view.challenge) return verb(view.challenge.target, 'can challenge it!', 'can challenge it');
+      return undefined;
+    };
 
     /** Cards arriving in my hand from somewhere other than the deck (swaps, passes). */
     const receiveFrom = (seat: number) => {
@@ -287,23 +381,24 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
       ids.forEach((id, i) => {
         hideHand.push(id);
         const card = myCard(id);
-        at(t + i * 60, () => launch(card, true, seatBox(seat), handCardBox(id), () => unhide(setHiddenHand, id), flightMs));
+        at(t + i * 60, () => launch(card, true, seatBox(seat), handCardBox(id), () => unhide(setHiddenHand, id), flight));
       });
       return ids.length;
     };
 
     /** A few cards flying from a player onto the pile (Discard All, wheel discards). */
-    const toPile = (player: number, count: number) => {
+    const toPile = (player: number, count: number, start = t) => {
       for (let i = 0; i < Math.min(count, 6); i++) {
-        at(t + i * 90, () => launch(null, false, seatBox(player), boxOf(anchors.current.discard), () => sfx.play(), flightMs));
+        at(start + i * 110, () => launch(null, false, seatBox(player), boxOf(anchors.current.discard), () => sfx.play(), flight));
       }
     };
 
-    for (const ev of fresh) {
+    fresh.forEach((ev, idx) => {
       switch (ev.type) {
         case 'deal': {
           const stagger = fast ? 10 : dealStagger(n);
           setBubbles({});
+          at(t, () => playFx({ kind: 'deal', at: deckPt() }));
           for (let r = 0; r < 7; r++) {
             for (let k = 1; k <= n; k++) {
               const seat = (ev.dealer + k) % n;
@@ -313,15 +408,14 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
                 if (!id) continue;
                 hideHand.push(id);
                 const card = myCard(id);
-                at(delay, () => launch(card, true, deckBox(), handCardBox(id), () => unhide(setHiddenHand, id), flightMs));
+                at(delay, () => launch(card, true, deckBox(), handCardBox(id), () => unhide(setHiddenHand, id), flight));
               } else {
                 bump(seat, -1);
-                at(delay, () => launch(oppFace(seat, r), false, deckBox(), seatBox(seat), () => bump(seat, 1), flightMs));
+                at(delay, () => launch(oppFace(seat, r), false, deckBox(), seatBox(seat), () => bump(seat, 1), flight));
               }
             }
           }
           for (let i = 0; i < Math.ceil((7 * n) / 6); i++) at(t + i * 6 * stagger, () => sfx.deal());
-          t += 7 * n * stagger + flightMs * 0.6;
           break;
         }
 
@@ -335,14 +429,15 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
               setFxColor(card.color === 'wild' ? null : card.color);
             }),
           );
-          t += flightMs + 200;
           break;
         }
 
         case 'play': {
           const { card, player } = ev;
+          lastPlayer = player;
           hideDiscard.push(card.id);
           const mine = player === me;
+          const effect = consequence(idx, card, player, ev.target);
           if (!mine) bump(player, 1);
           at(t, () => {
             let from: Box | null;
@@ -363,26 +458,26 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
                 unhide(setHiddenDiscard, card.id);
                 if (card.color !== 'wild') setFxColor(card.color);
                 else if (ev.chosenColor) setFxColor(ev.chosenColor);
+                playFx({ kind: 'land', at: pilePt(), card, mine });
                 const sp = actionSplash(card, view.mode);
-                const picked = ev.chosenColor ? `${COLOR_NAMES[ev.chosenColor]} it is!` : undefined;
-                const target = ev.target !== undefined ? `→ ${nameOf(ev.target)}` : undefined;
+                const picked = ev.chosenColor ? colorWord(ev.chosenColor) : undefined;
                 if (!sp) {
                   sfx.play();
                   if (card.value === 'reverse' || card.value === 'wildReverse') return; // the reverse event has its own splash
-                  if (card.color === 'wild' && picked) showSplash('WILD!', 'wild', picked);
+                  if (card.color === 'wild' && picked) showSplash('WILD!', 'wild', picked, moves.wild);
                   return;
                 }
                 if (sp.plus) sfx.plus(sp.plus);
                 else if (sp.text.startsWith('SKIP')) sfx.skip();
                 else if (card.color === 'wild') sfx.wild();
                 else sfx.play();
-                showSplash(sp.text, card.color === 'wild' ? 'wild' : (card.color as Color), picked ?? target);
+                const small = [picked, effect].filter(Boolean).join(' · ') || undefined;
+                showCutIn(player);
+                showSplash(sp.text, card.color === 'wild' ? 'wild' : (card.color as Color), small, sp.move ? moves[sp.move] : undefined);
               },
-              flightMs,
+              flight,
             );
           });
-          const isNumber = /^\d$/.test(card.value);
-          t += flightMs + (isNumber ? 90 : 260);
           break;
         }
 
@@ -390,15 +485,22 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
           const { player, count, reason } = ev;
           if (count <= 0) break;
           const mine = player === me;
+          const attacker = lastPlayer;
           at(t, () => {
             sfx.draw(count);
             if (mine && count >= 2) buzz(count >= 4 ? [40, 40, 80] : 40);
+            if (ATTACKS.has(reason)) {
+              hitVictims.add(player);
+              playFx({ kind: 'hit', from: attacker !== null && attacker !== player ? seatPt(attacker) : pilePt(), to: seatPt(player), amount: count });
+            } else if (reason === 'turn' || reason === 'wheel') {
+              playFx({ kind: 'draw', from: deckPt(), to: seatPt(player), count });
+            }
             if (reason === 'penalty' || reason === 'launch') return;
             if (reason === 'turn')
-              showBubble(player, mine ? (count > 1 ? `Drew ${count}` : 'Drew a card') : `Draws ${count}`, 'info', 1300);
-            else showBubble(player, `+${count} ${count >= 4 ? '😱' : '😬'}`, 'bad');
+              showBubble(player, mine ? (count > 1 ? `Drew ${count}` : 'Drew a card') : `Draws ${count}`, 'info', 1500);
+            else showBubble(player, `+${count} ${count >= 4 ? '😱' : '😬'}`, 'bad', 2300);
           });
-          const gap = fast ? 40 : count > 8 ? 70 : DRAW_GAP;
+          const gap = fast ? 40 : drawGap(count);
           for (let i = 0; i < count; i++) {
             const delay = t + i * gap;
             if (mine) {
@@ -406,70 +508,81 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
               if (!id) continue;
               hideHand.push(id);
               const card = myCard(id);
-              at(delay, () => launch(card, true, deckBox(), handCardBox(id), () => unhide(setHiddenHand, id), flightMs));
+              at(delay, () => launch(card, true, deckBox(), handCardBox(id), () => unhide(setHiddenHand, id), flight));
             } else {
               bump(player, -1);
               const face = oppFace(player, (view.players[player]?.handCount ?? count) - count + i);
-              at(delay, () => launch(face, false, deckBox(), seatBox(player), () => bump(player, 1), flightMs));
+              at(delay, () => launch(face, false, deckBox(), seatBox(player), () => bump(player, 1), flight));
             }
           }
-          t += (count - 1) * gap + flightMs * 0.75;
           break;
         }
 
-        case 'skip':
-          at(t, () => showBubble(ev.player, 'Skipped! 🚫', 'bad'));
-          t += 220;
+        case 'skip': {
+          const attacker = lastPlayer;
+          const quiet = hitVictims.has(ev.player);
+          at(t, () => {
+            showBubble(ev.player, ev.player === me ? 'You’re skipped! 🚫' : 'Skipped! 🚫', 'bad');
+            if (!quiet) playFx({ kind: 'skip', from: attacker !== null ? seatPt(attacker) : pilePt(), to: seatPt(ev.player) });
+          });
           break;
+        }
 
         case 'skipAll':
           at(t, () => {
             sfx.skip();
-            showSplash('SKIP EVERYONE!', undefined, `${nameOf(ev.player)} goes again`);
+            showSplash('SKIP EVERYONE!', undefined, verb(ev.player, 'go again!', 'goes again'), moves.skipAll);
+            playFx({ kind: 'skipAll', at: seatPt(ev.player) });
           });
-          t += 450;
           break;
 
         case 'reverse':
           at(t, () => {
             sfx.reverse();
-            showSplash('REVERSE!', undefined, n === 2 ? 'Works like a Skip with 2 players' : undefined);
+            showSplash(
+              'REVERSE!',
+              undefined,
+              n === 2 ? 'Works like a Skip with 2 players' : ev.direction === 1 ? 'Play goes clockwise ↻' : 'Play goes the other way ↺',
+              moves.reverse,
+            );
+            playFx({ kind: 'reverse', at: pilePt() });
           });
-          t += 380;
           break;
 
         case 'colorChange': {
           const color = ev.color;
+          const afterPlay = fresh[idx - 1]?.type === 'play';
           at(t, () => {
             setFxColor(color);
+            playFx({ kind: 'color', at: pilePt(), color, hex: theme.cardColors[color].base });
             // Wild plays already announced the colour in their splash.
-            if (!fresh.some((e) => e.type === 'play' && e.seq === ev.seq - 1)) {
+            if (!afterPlay) {
               sfx.wild();
-              showSplash(COLOR_NAMES[color].toUpperCase(), color, `${nameOf(ev.player)} picked`);
+              showSplash(COLOR_NAMES[color].toUpperCase(), color, `${nameOf(ev.player)} picked it`, theme.colorAlias?.[color] ?? moves.wild);
             }
           });
-          t += 300;
           break;
         }
 
         case 'uno':
           at(t, () => {
             sfx.uno();
-            showBubble(ev.player, 'NUNO!', 'uno', 2200);
+            showCutIn(ev.player);
+            showBubble(ev.player, 'NUNO!', 'uno', 2400);
+            playFx({ kind: 'uno', at: seatPt(ev.player) });
           });
-          t += 120;
           break;
 
         case 'caught':
           at(t, () => {
             sfx.caught();
             if (ev.player === me) buzz([60, 40, 60]);
-            const cost = view.mode === 'attack' ? 'two launcher hits' : '+2';
-            showSplash('CAUGHT!', 'red', `${nameOf(ev.player)} forgot to shout NUNO · ${cost}`);
+            const cost = view.mode === 'attack' ? 'two launcher hits' : 'draws 2';
+            showSplash('CAUGHT!', 'red', `${nameOf(ev.player)} forgot to shout NUNO · ${cost}`, moves.caught);
             showBubble(ev.player, 'Busted! 🙈', 'bad');
             showBubble(ev.by, 'Gotcha! 👉', 'good');
+            playFx({ kind: 'caught', at: seatPt(ev.player), by: seatPt(ev.by) });
           });
-          t += 450;
           break;
 
         case 'challenge':
@@ -481,27 +594,24 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
               ev.guilty ? 'red' : 'green',
               ev.guilty ? `${nameOf(ev.offender)} takes the penalty` : `${nameOf(ev.challenger)} takes it, plus 2`,
             );
+            playFx({ kind: 'challenge', at: pilePt(), guilty: ev.guilty });
           });
-          t += 700;
           break;
 
         case 'accept4':
           at(t, () => showBubble(ev.player, 'Fine… 😤', 'bad'));
-          t += 150;
           break;
 
         case 'pass':
           if (view.mode === 'attack') break; // the launcher event already said what happened
-          at(t, () => showBubble(ev.player, 'Pass', 'info', 1200));
-          t += 120;
+          at(t, () => showBubble(ev.player, 'Pass', 'info', 1400));
           break;
 
         case 'reshuffle':
           at(t, () => {
-            sfx.deal();
+            sfx.reshuffle();
             showSplash('RESHUFFLE!', undefined, 'Discard pile shuffled into the deck');
           });
-          t += 500;
           break;
 
         case 'seatChange':
@@ -511,39 +621,42 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
         // ── No Mercy ──
         case 'stack':
           at(t, () => {
-            sfx.plus(Math.min(10, ev.total));
-            showSplash(`+${ev.total}`, 'red', `${nameOf(ev.victim)}: stack it or take it!`);
-            showBubble(ev.victim, `+${ev.total} incoming 😰`, 'bad', 2200);
+            sfx.stack(ev.total);
+            showSplash(`+${ev.total}`, 'red', ev.victim === me ? 'Stack a bigger draw card — or take them all!' : `${nameOf(ev.victim)}: stack it or take it!`, moves.stack);
+            showBubble(ev.victim, `+${ev.total} incoming 😰`, 'bad', 2400);
+            playFx({ kind: 'stack', at: pilePt(), to: seatPt(ev.victim), total: ev.total });
           });
-          t += 500;
           break;
 
         case 'eliminated':
           at(t, () => {
-            sfx.lose();
+            sfx.knockout();
             if (ev.player === me) buzz([100, 60, 200]);
-            showSplash('KNOCKED OUT!', 'red', `${nameOf(ev.player)} hit 25 cards`);
+            showSplash('KNOCKED OUT!', 'red', `${nameOf(ev.player)} hit 25 cards`, moves.knockout);
             showBubble(ev.player, '💀 OUT', 'bad', 3000);
+            playFx({ kind: 'knockout', at: seatPt(ev.player) });
           });
-          t += 900;
           break;
 
         case 'swap': {
           const other = ev.a === me ? ev.b : ev.b === me ? ev.a : null;
           at(t, () => {
-            sfx.reverse();
+            sfx.swap();
             showBubble(ev.a, 'Swapped! 🔄', 'info');
             showBubble(ev.b, 'Swapped! 🔄', 'info');
+            if (fresh[idx - 1]?.type !== 'play' || (fresh[idx - 1] as { card?: Card }).card?.value === '7')
+              showSplash('SWAP!', undefined, `${nameOf(ev.a)} ⇄ ${nameOf(ev.b)}`, moves.swap);
+            playFx({ kind: 'swap', a: seatPt(ev.a), b: seatPt(ev.b) });
           });
           if (other !== null) receiveFrom(other);
-          t += 600;
           break;
         }
 
         case 'passHands': {
           at(t, () => {
-            sfx.reverse();
-            showSplash(view.mode === 'spin' ? 'TRADE HANDS!' : 'PASS HANDS!', undefined, 'Everyone passes their hand along');
+            sfx.swap();
+            showSplash(view.mode === 'spin' ? 'TRADE HANDS!' : 'PASS HANDS!', undefined, 'Everyone passes their hand along', moves.swap);
+            playFx({ kind: 'passHands', at: pilePt() });
           });
           // Find who passed to me: the previous active seat in the pass direction.
           let from = me;
@@ -555,47 +668,45 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
             }
           }
           if (from !== me) receiveFrom(from);
-          t += 700;
           break;
         }
 
         case 'discardAll':
         case 'wheelDiscard':
-          at(t, () => showBubble(ev.player, `−${ev.count} card${ev.count === 1 ? '' : 's'}`, 'good'));
+          at(t, () => {
+            showBubble(ev.player, `−${ev.count} card${ev.count === 1 ? '' : 's'}`, 'good');
+            if (ev.type === 'discardAll') sfx.discardAll();
+            playFx({ kind: 'discardAll', at: seatPt(ev.player), to: pilePt(), count: ev.count });
+          });
           toPile(ev.player, ev.count);
-          t += Math.min(ev.count, 6) * 90 + flightMs * 0.6;
           break;
 
         case 'roulette':
           at(t, () => {
-            sfx.wild();
-            showSplash(COLOR_NAMES[ev.color].toUpperCase(), ev.color, `${nameOf(ev.player)} flips until it shows up`);
+            sfx.roulette();
+            showSplash(COLOR_NAMES[ev.color].toUpperCase(), ev.color, `${nameOf(ev.player)} flips cards until it shows up`, theme.colorAlias?.[ev.color]);
+            playFx({ kind: 'color', at: pilePt(), color: ev.color, hex: theme.cardColors[ev.color].base });
           });
-          t += 650;
           break;
 
         // ── Flip ──
         case 'flip':
           at(t, () => {
-            sfx.wild();
-            showSplash(ev.side === 'dark' ? 'DARK SIDE!' : 'LIGHT SIDE!', undefined, 'Everything flips over');
+            sfx.flip(ev.side === 'dark');
+            showSplash(ev.side === 'dark' ? 'DARK SIDE!' : 'LIGHT SIDE!', undefined, 'Every card flips over', moves.flip);
+            playFx({ kind: 'flip', at: pilePt(), dark: ev.side === 'dark' });
           });
-          t += 700;
           break;
 
         // ── Attack ──
         case 'launch':
           at(t, () => {
             setLauncherShots((x) => x + 1);
-            if (ev.count === 0) {
-              sfx.click();
-              showBubble(ev.player, 'Phew! Nothing 😅', 'good', 1300);
-            } else {
-              sfx.plus(Math.min(ev.count, 6));
-              showBubble(ev.player, `Launched ${ev.count}! 💥`, 'bad');
-            }
+            sfx.launch(ev.count);
+            playFx({ kind: 'launch', at: deckPt(), to: seatPt(ev.player), count: ev.count });
+            if (ev.count === 0) showBubble(ev.player, 'Phew! Nothing 😅', 'good', 1500);
+            else showBubble(ev.player, `Launched ${ev.count}! 💥`, 'bad', 2200);
           });
-          t += ev.count === 0 ? 350 : 150;
           break;
 
         // ── Spin ──
@@ -604,36 +715,38 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
           at(t, () => {
             sfx.deal();
             setWheelSpin({ ...spin, id: ++uid.current });
+            // The clicker slows down with the wheel.
+            let d = 0;
+            for (let i = 0; i < 22 && d < WHEEL_SPIN_MS / 1000 - 0.15; i++) {
+              sfx.spinTick(d);
+              d += 0.04 + i * i * 0.0011;
+            }
           });
           at(t + WHEEL_SPIN_MS, () => {
-            sfx.wild();
+            sfx.spinStop();
             showSplash(WHEEL_INFO[ev.segment].name.toUpperCase() + '!', undefined, WHEEL_INFO[ev.segment].text);
           });
-          at(t + WHEEL_SPIN_MS + 1300, () =>
+          at(t + WHEEL_SPIN_MS + 1500, () =>
             setWheelSpin((w) => (w?.segment === spin.segment && w.spinner === spin.spinner ? null : w)),
           );
-          t += WHEEL_SPIN_MS + 500;
           break;
         }
 
         case 'showHand':
-          at(t, () => showReveal({ kind: 'show', player: ev.player, cards: ev.cards }, 3800));
-          t += 900;
+          at(t, () => showReveal({ kind: 'show', player: ev.player, cards: ev.cards }, 4000));
           break;
 
         case 'war':
           at(t, () => {
             sfx.challenge();
-            showReveal({ kind: 'war', plays: ev.plays, winner: ev.winner }, 4200);
+            showReveal({ kind: 'war', plays: ev.plays, winner: ev.winner }, 4400);
           });
           if (ev.winner !== null) {
             const w = ev.winner;
             const count = ev.plays.find((p) => p.player === w)?.cards.length ?? 1;
-            at(t + 1600, () => showBubble(w, 'Wins the War! ⚔️', 'good', 2000));
-            t += 1600;
-            toPile(w, count);
+            at(t + 1700, () => showBubble(w, 'Wins the War! ⚔️', 'good', 2200));
+            toPile(w, count, t + 1700);
           }
-          t += 900;
           break;
 
         case 'unoSpinCall':
@@ -642,13 +755,17 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
             showBubble(ev.player, 'NUNO SPIN!', 'uno', 2000);
             showSplash('NUNO SPIN!', 'yellow', `${nameOf(ev.player)} called it first`);
           });
-          t += 400;
+          break;
+
+        case 'roundOver':
+          at(t, () => playFx({ kind: 'win', at: seatPt(ev.winner), mine: ev.winner === me }));
           break;
 
         default:
           break;
       }
-    }
+      t += beat(ev);
+    });
 
     // Anything left in the queue arrived without an animation — just show it.
     if (queue.length) hideHand.splice(0, hideHand.length, ...hideHand.filter((id) => !queue.includes(id)));
@@ -673,7 +790,11 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
     };
     at(t + 60, settle);
 
-    if (myTurnNow && !wasMyTurn.current) at(t, yourTurn);
+    if (myTurnNow && !wasMyTurn.current)
+      at(t, () => {
+        yourTurn();
+        playFx({ kind: 'yourTurn', at: pt(boxOf(anchors.current.hand)) });
+      });
     wasMyTurn.current = myTurnNow;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
@@ -690,6 +811,7 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
     reveal,
     wheelSpin,
     launcherShots,
+    cutIn,
     fxColor,
     settled,
     rememberPlay,

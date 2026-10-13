@@ -3,6 +3,7 @@ import type { PublicPlayer, Side } from '../../game/types';
 import { MERCY_LIMIT } from '../../game/modes';
 import { CardView } from '../CardView';
 import type { Bubble } from './useTableFx';
+import { Avatar } from '../Avatar';
 
 interface Props {
   seat: number;
@@ -24,6 +25,10 @@ interface Props {
   side?: Side;
   /** Keep speech bubbles on screen for seats near the edges. */
   bubbleAlign?: 'left' | 'center' | 'right';
+  /** The theme's title for this player ("Jonin", "฿600M"). */
+  rank?: string;
+  /** Theme aura classes for the avatar. */
+  aura?: string;
   registerFan: (seat: number, el: HTMLElement | null) => void;
   onCatch: (seat: number) => void;
 }
@@ -44,6 +49,8 @@ export const Seat = memo(function Seat({
   mercy = false,
   side,
   bubbleAlign = 'center',
+  rank,
+  aura = '',
   registerFan,
   onCatch,
 }: Props) {
@@ -101,20 +108,25 @@ export const Seat = memo(function Seat({
 
         {/* avatar */}
         <div
-          className={`relative z-10 flex items-center justify-center rounded-full border-[3px] border-[var(--ink)] bg-white ${
+          className={`relative z-10 flex items-center justify-center rounded-full border-[3px] border-[var(--ink)] ${
             isTurn ? 'animate-pulseRing' : ''
-          }`}
+          } ${aura}`}
           style={{
             width: avatar,
             height: avatar,
             marginTop: -miniW * 0.55,
             fontSize: avatar * 0.56,
             boxShadow: isTurn ? undefined : '0 3px 0 var(--ink)',
-            background: isTurn ? '#fff1a8' : player.connected ? '#fff' : '#cfcadb',
+            background: isTurn ? 'var(--turn-bg)' : player.connected ? 'var(--surface)' : '#cfcadb',
             filter: player.connected ? undefined : 'grayscale(1)',
           }}
         >
-          <span className={isTurn && player.kind === 'bot' ? 'animate-wiggle inline-block' : ''}>{player.avatar}</span>
+          {/* A transformed wrapper would collapse a picture avatar, so pictures wiggle themselves. */}
+          {player.avatar.startsWith('img:') ? (
+            <Avatar value={player.avatar} fill className={isTurn && player.kind === 'bot' ? 'animate-wiggle' : ''} />
+          ) : (
+            <span className={isTurn && player.kind === 'bot' ? 'animate-wiggle inline-block' : ''}>{player.avatar}</span>
+          )}
 
           {/* card count */}
           <div
@@ -123,7 +135,7 @@ export const Seat = memo(function Seat({
                 ? 'bg-[var(--red)] text-white animate-buzz'
                 : danger
                   ? 'bg-[#ffe1e1] text-[#b3141c]'
-                  : 'bg-white text-[var(--ink)]'
+                  : 'bg-[var(--surface)] text-[var(--ink)]'
             }`}
             style={{
               right: compact ? -12 : -14,
@@ -156,7 +168,7 @@ export const Seat = memo(function Seat({
         {/* name plate */}
         <div
           className={`font-display relative z-20 -mt-2 truncate whitespace-nowrap rounded-full border-[2.5px] border-[var(--ink)] px-2.5 leading-tight shadow-[0_2px_0_var(--ink)] ${
-            isTurn ? 'bg-[var(--yellow)] text-[var(--ink)]' : 'bg-white text-[var(--ink)]'
+            isTurn ? 'bg-[var(--yellow)] text-[var(--ink)]' : 'bg-[var(--surface)] text-[var(--ink)]'
           }`}
           style={{ fontSize: compact ? 11 : 14, paddingTop: 1, paddingBottom: 1, width: 'max-content', maxWidth: nameMax }}
           title={player.name}
@@ -171,15 +183,20 @@ export const Seat = memo(function Seat({
             </span>
           )}
           {isTurn && player.kind === 'bot' && (
-            <span className="thinking-dots rounded-full bg-white px-1.5 leading-4 [&>span]:!h-1 [&>span]:!w-1">
+            <span className="thinking-dots rounded-full bg-[var(--surface)] px-1.5 leading-4 [&>span]:!h-1 [&>span]:!w-1">
               <span />
               <span />
               <span />
             </span>
           )}
           {showScore && !compact && <span className="font-display text-[11px] text-white/75">{player.score} pts</span>}
-          {player.kind === 'bot' && !compact && !isTurn && !isNext && (
-            <span className="font-display text-[10px] uppercase tracking-wider text-white/50">bot</span>
+          {rank && !isTurn && !isNext ? (
+            <span className="font-display max-w-[110px] truncate rounded-full bg-black/35 px-1.5 text-[10px] leading-4 text-white/90">{rank}</span>
+          ) : (
+            player.kind === 'bot' &&
+            !compact &&
+            !isTurn &&
+            !isNext && <span className="font-display text-[10px] uppercase tracking-wider text-white/50">bot</span>
           )}
         </div>
 
@@ -202,11 +219,11 @@ export const Seat = memo(function Seat({
 });
 
 const TONES: Record<Bubble['tone'], string> = {
-  info: 'bg-white text-[var(--ink)]',
+  info: 'bg-[var(--surface)] text-[var(--ink)]',
   bad: 'bg-[#ffe1e1] text-[#b3141c]',
   good: 'bg-[#dcffe5] text-[#13782f]',
   uno: 'bg-[var(--yellow)] text-[var(--ink)] text-lg',
-  emote: 'bg-white text-2xl',
+  emote: 'bg-[var(--surface)] text-[var(--ink)]',
 };
 
 export function SpeechBubble({

@@ -1,10 +1,11 @@
 import React from 'react';
 import type { ChallengeContext, Color, PublicPlayer } from '../game/types';
 import { COLOR_NAMES } from '../game/cards';
-import { CARD_COLORS } from '../lib/theme';
+import { useTheme } from '../themes';
 import { CardView } from './CardView';
 import { Modal } from './ui';
 import { sfx } from '../lib/sound';
+import { Avatar } from './Avatar';
 
 interface Props {
   open: boolean;
@@ -17,6 +18,7 @@ interface Props {
 
 /** Challenge a Wild Draw Four (Classic) or a Wild Draw Two / Wild Draw Color (Flip). */
 export const Wild4ChallengeModal: React.FC<Props> = ({ open, context, offender, chosen, onChoice }) => {
+  const pal = useTheme().cardColors;
   if (!context) return null;
   const prev = COLOR_NAMES[context.prevColor];
   const name = offender?.name ?? 'They';
@@ -37,18 +39,18 @@ export const Wild4ChallengeModal: React.FC<Props> = ({ open, context, offender, 
       <div className="p-5 text-center sm:p-6">
         <div className="relative mx-auto -mt-16 mb-2 flex w-fit items-end justify-center">
           <CardView card={{ color: 'wild', value: copy.card as 'wild4' }} width={92} className="-rotate-12" />
-          <span className="absolute -right-6 bottom-0 flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-[var(--ink)] bg-white text-3xl shadow-[0_3px_0_var(--ink)]">
-            {offender?.avatar}
+          <span className="absolute -right-6 bottom-0 flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-[var(--ink)] bg-[var(--surface)] text-3xl shadow-[0_3px_0_var(--ink)]">
+            <Avatar value={offender?.avatar} fill />
           </span>
         </div>
         <h2 className="font-display text-3xl">
           {name} hit you with {copy.hit}!
         </h2>
-        <p className="mt-2 font-medium text-[#4d4566]">
+        <p className="mt-2 font-medium text-[var(--soft)]">
           It's only allowed if they had <b>no</b>{' '}
           <span
             className="font-display rounded-md px-1.5 text-white"
-            style={{ background: CARD_COLORS[context.prevColor].base, textShadow: '0 1px 0 var(--ink)' }}
+            style={{ background: pal[context.prevColor].base, textShadow: '0 1px 0 var(--ink)' }}
           >
             {prev}
           </span>{' '}
@@ -64,7 +66,7 @@ export const Wild4ChallengeModal: React.FC<Props> = ({ open, context, offender, 
             className="btn btn-white flex flex-col items-center px-2 py-3"
           >
             <span className="text-xl">Take it</span>
-            <span className="font-body mt-1 whitespace-normal text-xs font-semibold leading-tight tracking-normal text-[#6b6385]">
+            <span className="font-body mt-1 whitespace-normal text-xs font-semibold leading-tight tracking-normal text-[var(--muted)]">
               {copy.take}
             </span>
           </button>

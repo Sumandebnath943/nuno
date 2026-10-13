@@ -22,9 +22,30 @@ import { TargetPicker } from './board/TargetPicker';
 import { SpinWheel } from './board/SpinWheel';
 import { WheelPickModal } from './board/WheelPickModal';
 import { RevealOverlay } from './board/RevealOverlay';
-import { EMOTES, MyPlate, NunoButton, nunoState, SplashText, StatusBanner, eventLine, turnHint } from './board/Controls';
-import { sfx, isMuted, setMuted } from '../lib/sound';
+import { CutIn } from './board/CutIn';
+import { avatarImage, preload } from '../themes/characters';
+import {
+  EventLog,
+  MyPlate,
+  NunoButton,
+  nunoState,
+  SplashText,
+  StatusBanner,
+  TauntLayer,
+  eventLine,
+  turnHint,
+  type FloatingTaunt,
+} from './board/Controls';
+import { fxSounds, sfx, setMuted } from '../lib/sound';
 import { useIsTouch, useSafeArea } from '../lib/device';
+import { useSettings } from '../lib/settings';
+import { music } from '../lib/music';
+import { findTaunt } from '../lib/taunts';
+import { cardHelp } from '../lib/modeGuide';
+import { fx as fxEngine } from '../fx/engine';
+import { useTheme } from '../themes';
+import { AmbientCanvas, FxCanvas } from './ThemeStage';
+import { Avatar } from './Avatar';
 
 interface Props {
   view: GameView;
@@ -32,11 +53,12 @@ interface Props {
   roomId?: string;
   chatMessages: ChatMessage[];
   onAction: (intent: Intent) => void;
-  onSendChat: (text: string) => void;
+  onTaunt: (id: string) => void;
   onLeave: () => void;
   onNextRound: () => void;
   onNewGame: () => void;
   onOpenRules: () => void;
+  onOpenSettings: () => void;
 }
 
 type ChallengeEvent = Extract<GameEvent, { type: 'challenge' }>;
@@ -57,12 +79,15 @@ export const GameBoard: React.FC<Props> = ({
   roomId,
   chatMessages,
   onAction,
-  onSendChat,
+  onTaunt,
   onLeave,
   onNextRound,
   onNewGame,
   onOpenRules,
+  onOpenSettings,
 }) => {
+  const theme = useTheme();
+  const settings = useSettings();
   const rootRef = useRef<HTMLDivElement>(null);
   const size = useViewportSize(rootRef);
   const safe = useSafeArea();
@@ -101,8 +126,11 @@ export const GameBoard: React.FC<Props> = ({
   // ── local UI state ───────────────────────────────────────
   const [pending, setPending] = useState<Pending | null>(null);
   const [sorted, setSorted] = useState(() => localStorage.getItem('nuno.sort') !== '0');
-  const [muted, setMutedState] = useState(isMuted());
+  const muted = settings.muted;
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
+  const [pileHelp, setPileHelp] = useState(false);
+  const [floating, setFloating] = useState<FloatingTaunt[]>([]);
   const [challengeResult, setChallengeResult] = useState<ChallengeEvent | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -163,13 +191,16 @@ export const GameBoard: React.FC<Props> = ({
     setPending(null);
   }, [roundDone]);
 
+  useEffect(() => setPileHelp(false), [view.discardTop[view.discardTop.length - 1]?.id]);
+
   // Drop a half-made play if the turn moved on underneath it.
   useEffect(() => {
     if (pending && (!myTurn || !view.myHand.some((c) => c.id === pending.card.id))) setPending(null);
   }, [myTurn, view.myHand, pending]);
 
-  // Chat / emotes become speech bubbles over the sender's seat.
+  // Trash talk floats up from the sender's seat; typed chat becomes a speech bubble.
   const seenChat = useRef<Set<string> | null>(null);
+  const tauntSpot = useRef<(seat: number) => { x: number; y: number }>(() => ({ x: 0, y: 0 }));
   useEffect(() => {
     if (!seenChat.current) {
       seenChat.current = new Set(chatMessages.map((m) => m.id));
@@ -179,10 +210,32 @@ export const GameBoard: React.FC<Props> = ({
       if (seenChat.current.has(m.id)) continue;
       seenChat.current.add(m.id);
       if (m.isSystem || m.seat === undefined) continue;
-      const isEmote = EMOTES.includes(m.text);
-      fx.showBubble(m.seat, isEmote ? m.text : m.text.slice(0, 40), isEmote ? 'emote' : 'info', 2600);
+      const taunt = findTaunt(m.taunt);
+      if (!taunt) {
+        fx.showBubble(m.seat, m.text.slice(0, 40), 'info', 2600);
+        continue;
+      }
+      if (!settings.muted) fxSounds[taunt.sound]?.();
+      const spot = tauntSpot.current(m.seat);
+      const key = m.id;
+      setFloating((list) => [...list.slice(-5), { key, x: spot.x, y: spot.y, text: taunt.text, avatar: m.avatar }]);
+      setTimeout(() => setFloating((list) => list.filter((x) => x.key !== key)), 3500);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages, fx.showBubble]);
+
+  // Fetch the cut-in pictures of everyone at the table before they're needed.
+  const avatarKey = view.players.map((p) => p.avatar).join('|');
+  useEffect(() => {
+    preload(view.players.map((p) => avatarImage(p.avatar)?.url).filter((u): u is string => !!u));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarKey]);
+
+  // Shake the whole table on big hits.
+  useEffect(() => {
+    fxEngine.setShakeTarget(rootRef.current);
+    return () => fxEngine.setShakeTarget(null);
+  }, []);
 
   // ── actions ──────────────────────────────────────────────
   const playCard = (card: Card, extra: { color?: Color; target?: number } = {}) => {
@@ -248,7 +301,7 @@ export const GameBoard: React.FC<Props> = ({
     onAction({ type: 'uno' });
   };
   const catchPlayer = useCallback((seat: number) => onAction({ type: 'catch', target: seat }), [onAction]);
-  const emote = (e: string) => onSendChat(e);
+  const describe = useCallback((card: Card) => cardHelp(mode, card), [mode]);
 
   const toggleSort = () => {
     sfx.click();
@@ -260,7 +313,6 @@ export const GameBoard: React.FC<Props> = ({
   const toggleMute = () => {
     const next = !muted;
     setMuted(next);
-    setMutedState(next);
     if (!next) sfx.click();
   };
   const copyInvite = () => {
@@ -310,6 +362,28 @@ export const GameBoard: React.FC<Props> = ({
   const dimOthers = myTurn && !anyModal;
   const btn = L.mobile ? 'h-11 px-3.5 text-base' : 'h-12 px-5 text-lg';
   const dark = view.side === 'dark';
+  const rankOf = (count: number, score: number) => theme.rank?.(count, score);
+  const auraOf = (seat: number, count: number) =>
+    [view.actor === seat && !roundDone ? theme.auraClass : '', count === 1 && !roundDone ? theme.hotClass : ''].filter(Boolean).join(' ');
+  const topCard = view.discardTop[view.discardTop.length - 1];
+  const topHelp = topCard ? cardHelp(mode, topCard) : null;
+
+  // Where a taunt floats up from: above an opponent's seat, or above your hand.
+  tauntSpot.current = (seat: number) => {
+    // Keep the bubble (up to ~260px wide) on screen.
+    const clampX = (x: number) => Math.min(L.W - 135, Math.max(135, x));
+    if (seat === view.me) return { x: clampX(L.mobile ? 120 : cx), y: L.H - L.handBottom - L.cw * CARD_RATIO - (L.mobile ? 70 : 30) };
+    const k = (seat - view.me - 1 + n) % n;
+    const spot = L.seats[k] ?? { x: cx, y: cy };
+    return { x: clampX(spot.x), y: spot.y - (L.compactSeats ? 34 : 50) };
+  };
+
+  // The music gets more intense when someone is one card from winning.
+  const tense = !roundDone && (view.players.some((p) => !p.out && p.handCount === 1) || (view.stack?.total ?? 0) >= 6);
+  useEffect(() => {
+    music.setIntensity(tense ? 1 : 0);
+  }, [tense]);
+  useEffect(() => () => music.setIntensity(0), []);
 
   const drawLabel = launching
     ? view.launch?.untilFire
@@ -360,13 +434,13 @@ export const GameBoard: React.FC<Props> = ({
       : 'The next player has to match it. Numbers show how many you hold.';
 
   return (
-    <div
-      ref={rootRef}
-      className="bg-room relative h-[100dvh] w-full select-none overflow-hidden"
-      style={
-        dark ? { filter: 'saturate(0.85)', background: 'radial-gradient(ellipse at 50% 45%, #2a2142, #0d0b16 75%)' } : undefined
-      }
-    >
+    <div ref={rootRef} className="relative h-[100dvh] w-full select-none overflow-hidden">
+      {/* Flip's Dark Side: the whole room goes dark. */}
+      <div
+        className="pointer-events-none absolute inset-0 transition-opacity duration-700"
+        style={{ opacity: dark ? 1 : 0, background: 'radial-gradient(ellipse at 50% 45%, rgba(42,33,66,0.75), rgba(13,11,22,0.95) 75%)' }}
+      />
+      <AmbientCanvas className="z-[12]" />
       <Table
         cx={cx}
         cy={cy}
@@ -389,14 +463,14 @@ export const GameBoard: React.FC<Props> = ({
             <ModeBadge mode={mode} size={L.mobile ? 30 : 34} />
             <span className="font-display hidden whitespace-nowrap text-base text-white drop-shadow md:inline">{info.name}</span>
           </button>
-          <span className="font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-white px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
+          <span className="font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)]">
             R{view.round}
-            <span className="hidden text-[#6b6385] sm:inline"> · {view.targetScore ? `to ${view.targetScore}` : '1 round'}</span>
+            <span className="hidden text-[var(--muted)] sm:inline"> · {view.targetScore ? `to ${view.targetScore}` : '1 round'}</span>
           </span>
           {mode === 'flip' && (
             <span
               className={`font-display whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-2.5 text-sm leading-7 shadow-[0_2px_0_var(--ink)] transition-colors ${
-                dark ? 'bg-[#141019] text-white' : 'bg-white text-[var(--ink)]'
+                dark ? 'bg-[#141019] text-white' : 'bg-[var(--surface)] text-[var(--ink)]'
               }`}
             >
               {dark ? '🌑' : '☀️'}
@@ -406,7 +480,7 @@ export const GameBoard: React.FC<Props> = ({
           {roomId && (
             <button
               onClick={copyInvite}
-              className="font-display hidden whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[#e9e2ff] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)] sm:block"
+              className="font-display hidden whitespace-nowrap rounded-full border-2 border-[var(--ink)] bg-[var(--highlight)] px-2.5 text-sm leading-7 text-[var(--ink)] shadow-[0_2px_0_var(--ink)] sm:block"
               title="Copy invite link"
             >
               {copied ? 'Link copied!' : `Room ${roomId}`}
@@ -417,11 +491,15 @@ export const GameBoard: React.FC<Props> = ({
         {!L.roomForBanner && !roundDone && (
           <div
             className="font-display absolute bottom-1.5 left-1/2 hidden -translate-x-1/2 whitespace-nowrap rounded-full border-2 border-[var(--ink)] px-3 text-sm leading-7 shadow-[0_2px_0_var(--ink)] sm:block"
-            style={{ background: myMove ? 'var(--yellow)' : '#fff', color: 'var(--ink)' }}
+            style={{ background: myMove ? 'var(--yellow)' : 'var(--surface)', color: 'var(--ink)' }}
           >
             {myMove
               ? `Your ${myTurn ? 'turn' : 'move'}!${L.W >= 1000 ? ` ${hint}` : ''}`
-              : `${view.players[view.actor ?? view.current]?.avatar} ${view.players[view.actor ?? view.current]?.name}…`}
+              : (
+                <>
+                  <Avatar value={view.players[view.actor ?? view.current]?.avatar} /> {view.players[view.actor ?? view.current]?.name}…
+                </>
+              )}
           </div>
         )}
 
@@ -435,10 +513,23 @@ export const GameBoard: React.FC<Props> = ({
             <span aria-hidden>🗂️</span>
             <span className="hidden md:inline">Sort</span>
           </button>
+          <button
+            onClick={() => setLogOpen((v) => !v)}
+            className={`icon-btn ${logOpen ? 'is-on' : ''}`}
+            aria-label="What just happened"
+            title="What just happened"
+            data-log-toggle
+          >
+            <span aria-hidden>📜</span>
+            <span className="hidden lg:inline">Log</span>
+          </button>
           <button onClick={toggleMute} className="icon-btn" aria-label={muted ? 'Unmute' : 'Mute'}>
             {muted ? '🔇' : '🔊'}
           </button>
-          <button onClick={onOpenRules} className="icon-btn" aria-label="How to play" title="How to play">
+          <button onClick={onOpenSettings} className="icon-btn" aria-label="Settings" title="Theme, pace & sound">
+            <span aria-hidden>⚙️</span>
+          </button>
+          <button onClick={onOpenRules} className="icon-btn hide-on-phone" aria-label="How to play" title="How to play">
             ?
           </button>
           <button onClick={() => setConfirmLeave(true)} className="icon-btn" aria-label="Leave game" title="Leave game">
@@ -446,6 +537,7 @@ export const GameBoard: React.FC<Props> = ({
             <span className="hidden md:inline">Leave</span>
           </button>
         </div>
+        {logOpen && <EventLog view={view} onClose={() => setLogOpen(false)} />}
       </header>
 
       {/* ── opponents around the table ── */}
@@ -471,6 +563,8 @@ export const GameBoard: React.FC<Props> = ({
             mercy={mode === 'nomercy'}
             side={view.side}
             bubbleAlign={spot.x < 90 ? 'left' : spot.x > L.W - 90 ? 'right' : 'center'}
+            rank={rankOf(p.handCount, p.score)}
+            aura={auraOf(seat, p.handCount)}
             registerFan={registerFan}
             onCatch={catchPlayer}
           />
@@ -479,7 +573,7 @@ export const GameBoard: React.FC<Props> = ({
 
       {/* ── status above the piles ── */}
       {L.roomForBanner && (
-        <StatusBanner view={view} hint={hint} x={cx} y={cy - pileH / 2 - (L.mobile ? 78 : 92)} compact={L.mobile} />
+        <StatusBanner view={view} hint={hint} x={cx} y={cy - pileH / 2 - (L.mobile ? 78 : 92)} compact={L.mobile} hidden={!!fx.splash} />
       )}
 
       {/* ── draw & discard piles ── */}
@@ -500,7 +594,19 @@ export const GameBoard: React.FC<Props> = ({
           launcher={mode === 'attack'}
           shots={fx.launcherShots}
         />
-        <div className="relative">
+        <div
+          className="relative"
+          onClick={() => topHelp && setPileHelp((v) => !v)}
+          role={topHelp ? 'button' : undefined}
+          title={topHelp ? `${topHelp.name}: ${topHelp.text}` : undefined}
+        >
+          {pileHelp && topHelp && (
+            <span className="absolute bottom-full left-1/2 z-30 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-xl border-2 border-[var(--ink)] bg-[var(--surface)] px-2 py-1 text-center text-[11px] font-semibold leading-tight text-[var(--soft)] shadow-[0_2px_0_var(--ink)] animate-popIn">
+              <b className="font-display text-xs text-[var(--ink)]">{topHelp.name}</b>
+              <br />
+              {topHelp.text}
+            </span>
+          )}
           <Discard
             ref={discardRef}
             width={L.pileW}
@@ -550,6 +656,7 @@ export const GameBoard: React.FC<Props> = ({
         touch={touch}
         registerCard={registerCard}
         onPlay={handleCardClick}
+        describe={describe}
       />
 
       {me.out && !roundDone && (
@@ -582,8 +689,9 @@ export const GameBoard: React.FC<Props> = ({
             showScore={false}
             compact
             bubble={fx.bubbles[view.me]}
-            onEmote={emote}
+            onTaunt={onTaunt}
             mercy={mode === 'nomercy'}
+            aura={auraOf(view.me, myCount)}
           />
           <div className="flex gap-1.5">{actionButtons}</div>
           <NunoButton state={nuno} size={nunoSize} onPress={shout} compact />
@@ -598,8 +706,10 @@ export const GameBoard: React.FC<Props> = ({
               showScore={view.targetScore > 0}
               compact={L.short}
               bubble={fx.bubbles[view.me]}
-              onEmote={emote}
+              onTaunt={onTaunt}
               mercy={mode === 'nomercy'}
+              rank={rankOf(myCount, me.score)}
+              aura={auraOf(view.me, myCount)}
             />
           </div>
           {/* Short screens stack the buttons above the buzzer so they don't run into the hand. */}
@@ -624,8 +734,11 @@ export const GameBoard: React.FC<Props> = ({
         onSpin={() => onAction({ type: 'spin' })}
       />
       <RevealOverlay reveal={fx.reveal} players={view.players} me={view.me} x={cx} y={cy} />
+      <CutIn cut={fx.cutIn} y={cy - pileH * 0.15} W={L.W} H={L.H} top={L.topBar} />
       <SplashText splash={fx.splash} x={cx} y={cy - pileH * 0.15} scale={L.mobile ? 0.62 : L.short ? 0.7 : 1} />
       <FlightLayer flights={fx.flights} onLand={fx.land} />
+      <FxCanvas className="z-[46]" />
+      <TauntLayer taunts={floating} />
 
       {/* ── modals ── */}
       <ColorPickerModal
@@ -689,7 +802,7 @@ export const GameBoard: React.FC<Props> = ({
         <div className="p-6 text-center">
           <div className="text-5xl">🚪</div>
           <h2 className="font-display mt-2 text-3xl">Leave the game?</h2>
-          <p className="mt-1 font-medium text-[#6b6385]">
+          <p className="mt-1 font-medium text-[var(--muted)]">
             {roomId && isHost ? 'You are the host — the room closes for everyone.' : 'Your progress in this game will be lost.'}
           </p>
           <div className="mt-5 grid grid-cols-2 gap-3">

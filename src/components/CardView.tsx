@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
 import type { Card, CardValue, Color, Side } from '../game/types';
 import { cardLabel } from '../game/cards';
-import { CARD_COLORS, INK } from '../lib/theme';
+import { INK } from '../lib/theme';
+import { useTheme, type Theme } from '../themes';
 
 // Every card is one 120×186 SVG (the real card ratio), so it stays crisp at any size.
 export const CARD_RATIO = 186 / 120;
@@ -10,6 +11,7 @@ const SIZES = { xs: 38, sm: 56, md: 84, lg: 110, xl: 140 } as const;
 export type CardSize = keyof typeof SIZES;
 
 type FaceProps = Pick<Card, 'color' | 'value'> & { spin?: boolean };
+type Palette = Theme['cardColors'];
 
 export interface CardViewProps {
   card?: FaceProps | null;
@@ -26,9 +28,27 @@ export interface CardViewProps {
   onClick?: () => void;
 }
 
-const DISPLAY: React.CSSProperties = { fontFamily: 'var(--font-display)' };
+const DISPLAY: React.CSSProperties = { fontFamily: 'var(--font-card)' };
 const OVAL = { cx: 60, cy: 93, rx: 41, ry: 72, rot: 30 };
 const DARK_COLORS = new Set(['pink', 'teal', 'orange', 'purple']);
+
+/** Views are rebuilt on every game update, so compare faces by value, not by object. */
+function sameCard(a: CardViewProps, b: CardViewProps): boolean {
+  const x = a.card;
+  const y = b.card;
+  return (
+    a.faceDown === b.faceDown &&
+    a.side === b.side &&
+    a.size === b.size &&
+    a.width === b.width &&
+    a.glow === b.glow &&
+    a.dim === b.dim &&
+    a.className === b.className &&
+    a.onClick === b.onClick &&
+    a.style === b.style &&
+    (x === y || (!!x && !!y && x.color === y.color && x.value === y.value && x.spin === y.spin))
+  );
+}
 
 export const CardView = memo(function CardView({
   card,
@@ -42,23 +62,25 @@ export const CardView = memo(function CardView({
   style,
   onClick,
 }: CardViewProps) {
+  const theme = useTheme();
   const w = width ?? SIZES[size];
   const showBack = faceDown || !card;
   const dark = !showBack && (side === 'dark' || DARK_COLORS.has(card.color) || card.value === 'wildDrawColor');
+  const Back = theme.card.Back;
   return (
     <div
       onClick={onClick}
       role="img"
       aria-label={showBack ? 'Face-down card' : cardLabel(card)}
-      className={`nuno-card ${glow ? 'is-glow' : ''} ${dim ? 'is-dim' : ''} ${onClick ? 'cursor-pointer' : ''} ${className}`}
+      className={`nuno-card ${w < 36 ? 'is-mini' : ''} ${glow ? 'is-glow' : ''} ${dim ? 'is-dim' : ''} ${onClick ? 'cursor-pointer' : ''} ${className}`}
       style={{ width: w, height: w * CARD_RATIO, borderRadius: w * 0.1, ...style }}
     >
       <svg viewBox="0 0 120 186" width="100%" height="100%" aria-hidden="true">
-        {showBack ? <Back /> : <Face card={card} dark={dark} />}
+        {showBack ? <Back /> : <Face card={card} dark={dark} theme={theme} />}
       </svg>
     </div>
   );
-});
+}, sameCard);
 
 // ── faces ───────────────────────────────────────────────────
 
@@ -79,18 +101,21 @@ const QUARTERED = new Set<CardValue>([
   'wildSwap',
 ]);
 
-function Face({ card, dark }: { card: FaceProps; dark: boolean }) {
+function Face({ card, dark, theme }: { card: FaceProps; dark: boolean; theme: Theme }) {
+  const pal = theme.cardColors;
   const wild = card.color === 'wild';
-  const c = wild ? '#fff' : CARD_COLORS[card.color as Color].base;
+  const c = wild ? '#fff' : pal[card.color as Color].base;
+  const { pattern, patternOpacity = 0.15, Decor } = theme.card;
   return (
     <>
-      <rect width="120" height="186" rx="12" fill={dark ? '#141019' : '#fff'} />
+      <rect width="120" height="186" rx="12" fill={dark ? '#141019' : theme.card.edge} />
       <rect x="6" y="6" width="108" height="174" rx="8" fill={wild ? 'url(#nf-wild)' : `url(#nf-${card.color})`} />
+      {pattern && <rect x="6" y="6" width="108" height="174" rx="8" fill={`url(#${pattern})`} opacity={patternOpacity} />}
       <path d="M6 14 Q6 6 14 6 H84 L6 100 Z" fill="url(#n-sheen)" />
 
       {wild && QUARTERED.has(card.value) ? (
         <g transform={`translate(${OVAL.cx} ${OVAL.cy}) rotate(${OVAL.rot})`}>
-          <Quarters rx={OVAL.rx} ry={OVAL.ry} stroke={4} dark={dark} />
+          <Quarters rx={OVAL.rx} ry={OVAL.ry} stroke={4} dark={dark} pal={pal} />
         </g>
       ) : (
         <ellipse
@@ -99,20 +124,21 @@ function Face({ card, dark }: { card: FaceProps; dark: boolean }) {
           rx={OVAL.rx}
           ry={OVAL.ry}
           transform={`rotate(${OVAL.rot} ${OVAL.cx} ${OVAL.cy})`}
-          fill={dark ? '#1d1828' : '#fff'}
+          fill={dark ? '#1d1828' : (theme.card.oval ?? '#fff')}
         />
       )}
 
       {card.spin && <Swirl color={c} />}
 
       <g transform={`translate(${OVAL.cx} ${OVAL.cy})`}>
-        <CenterGlyph value={card.value} color={c} />
+        <CenterGlyph value={card.value} color={c} pal={pal} />
       </g>
 
-      <Corner value={card.value} dark={dark} />
+      <Corner value={card.value} dark={dark} pal={pal} />
       <g transform="rotate(180 60 93)">
-        <Corner value={card.value} dark={dark} />
+        <Corner value={card.value} dark={dark} pal={pal} />
       </g>
+      {Decor && <Decor color={card.color} dark={dark} />}
     </>
   );
 }
@@ -132,7 +158,7 @@ function BigText({ text, color = '#fff', size = 64, y = 22 }: { text: string; co
   );
 }
 
-function CenterGlyph({ value, color }: { value: CardValue; color: string }) {
+function CenterGlyph({ value, color, pal }: { value: CardValue; color: string; pal: Palette }) {
   const ink = color;
   switch (value) {
     case 'skip':
@@ -183,9 +209,9 @@ function CenterGlyph({ value, color }: { value: CardValue; color: string }) {
       return <MiniFan colors={[ink, ink, ink, ink, ink]} />;
     case 'wild4':
     case 'wildDraw4':
-      return <MiniFan colors={(['blue', 'green', 'red', 'yellow'] as Color[]).map((c) => CARD_COLORS[c].base)} />;
+      return <MiniFan colors={(['blue', 'green', 'red', 'yellow'] as Color[]).map((c) => pal[c].base)} />;
     case 'wildDraw2':
-      return <MiniFan colors={[CARD_COLORS.blue.base, CARD_COLORS.red.base]} />;
+      return <MiniFan colors={[pal.blue.base, pal.red.base]} />;
     case 'wild6':
       return <BigText text="+6" size={70} />;
     case 'wild10':
@@ -193,17 +219,17 @@ function CenterGlyph({ value, color }: { value: CardValue; color: string }) {
     case 'wildDrawColor':
       return <BigText text="+?" size={64} />;
     case 'wildRoulette':
-      return <RouletteGlyph />;
+      return <RouletteGlyph pal={pal} />;
     case 'wildAllHit':
       return (
         <>
-          <Burst color={CARD_COLORS.red.base} />
+          <Burst color={pal.red.base} />
           <BigText text="ALL" size={26} y={-2} />
           <BigText text="HIT" size={26} y={22} />
         </>
       );
     case 'wildHitFire':
-      return <FlameGlyph />;
+      return <FlameGlyph pal={pal} />;
     case 'hit2':
       return (
         <>
@@ -219,7 +245,7 @@ function CenterGlyph({ value, color }: { value: CardValue; color: string }) {
     case 'wildTargetDraw2':
       return (
         <>
-          <TargetGlyph />
+          <TargetGlyph pal={pal} />
           <BigText text="+2" size={30} y={52} />
         </>
       );
@@ -263,7 +289,7 @@ const CORNER_TEXT: Partial<Record<CardValue, [string, number]>> = {
   discardAll: ['ALL', 16],
 };
 
-function Corner({ value, dark }: { value: CardValue; dark: boolean }) {
+function Corner({ value, dark, pal }: { value: CardValue; dark: boolean; pal: Palette }) {
   const label = CORNER_TEXT[value];
   if (label) return <CornerText text={label[0]} size={label[1]} />;
   const mini = (child: React.ReactNode) => <g transform="translate(21 29) scale(0.36)">{child}</g>;
@@ -288,13 +314,13 @@ function Corner({ value, dark }: { value: CardValue; dark: boolean }) {
     case 'wildSwap':
       return mini(<SwapGlyph color="#fff" />);
     case 'wildRoulette':
-      return mini(<RouletteGlyph />);
+      return mini(<RouletteGlyph pal={pal} />);
     case 'wildHitFire':
-      return mini(<FlameGlyph />);
+      return mini(<FlameGlyph pal={pal} />);
     case 'wild':
       return (
         <g transform="translate(21 29)">
-          <Quarters rx={10} ry={13} stroke={1.5} dark={dark} />
+          <Quarters rx={10} ry={13} stroke={1.5} dark={dark} pal={pal} />
         </g>
       );
     default:
@@ -433,31 +459,31 @@ function Burst({ color }: { color: string }) {
   return <polygon points={pts} fill={color} stroke={INK} strokeWidth="4" strokeLinejoin="round" />;
 }
 
-function FlameGlyph() {
+function FlameGlyph({ pal }: { pal: Palette }) {
   return (
     <g>
       <path
         d="M 0 -40 C 14 -22 30 -12 26 10 C 23 28 10 36 0 36 C -12 36 -26 28 -26 10 C -26 -4 -16 -12 -12 -22 C -6 -12 -4 -6 -2 -2 C 2 -16 -2 -28 0 -40 Z"
-        fill={CARD_COLORS.orange.base}
+        fill={pal.orange.base}
         stroke={INK}
         strokeWidth="5"
         strokeLinejoin="round"
       />
       <path
         d="M 0 -6 C 8 4 14 12 10 22 C 8 28 4 30 0 30 C -6 30 -12 26 -12 18 C -12 10 -6 6 0 -6 Z"
-        fill={CARD_COLORS.yellow.base}
+        fill={pal.yellow.base}
       />
     </g>
   );
 }
 
-function TargetGlyph() {
+function TargetGlyph({ pal }: { pal: Palette }) {
   return (
     <g fill="none" strokeLinecap="round">
       <circle r="24" stroke={INK} strokeWidth="11" />
       <circle r="24" stroke="#fff" strokeWidth="5" />
       <circle r="10" stroke={INK} strokeWidth="9" />
-      <circle r="10" stroke={CARD_COLORS.red.base} strokeWidth="4" />
+      <circle r="10" stroke={pal.red.base} strokeWidth="4" />
       {[0, 90, 180, 270].map((a) => (
         <g key={a} transform={`rotate(${a})`}>
           <line x1="0" y1="-34" x2="0" y2="-18" stroke={INK} strokeWidth="9" />
@@ -468,7 +494,7 @@ function TargetGlyph() {
   );
 }
 
-function RouletteGlyph() {
+function RouletteGlyph({ pal }: { pal: Palette }) {
   const cols = ['red', 'blue', 'yellow', 'green', 'red', 'blue', 'yellow', 'green'] as Color[];
   return (
     <g>
@@ -481,7 +507,7 @@ function RouletteGlyph() {
           <path
             key={i}
             d={`M0 0 L${(Math.cos(a0) * r).toFixed(1)} ${(Math.sin(a0) * r).toFixed(1)} A ${r} ${r} 0 0 1 ${(Math.cos(a1) * r).toFixed(1)} ${(Math.sin(a1) * r).toFixed(1)} Z`}
-            fill={CARD_COLORS[c].base}
+            fill={pal[c].base}
             stroke={INK}
             strokeWidth="1.5"
           />
@@ -509,57 +535,34 @@ function Swirl({ color }: { color: string }) {
   );
 }
 
-function Quarters({ rx, ry, stroke, dark = false }: { rx: number; ry: number; stroke: number; dark?: boolean }) {
+function Quarters({ rx, ry, stroke, dark = false, pal }: { rx: number; ry: number; stroke: number; dark?: boolean; pal: Palette }) {
   const [a, b, c, d] = dark ? (['pink', 'teal', 'orange', 'purple'] as Color[]) : (['red', 'blue', 'green', 'yellow'] as Color[]);
   return (
     <g>
-      <path d={`M0 0 L0 ${-ry} A ${rx} ${ry} 0 0 0 ${-rx} 0 Z`} fill={CARD_COLORS[a].base} />
-      <path d={`M0 0 L${rx} 0 A ${rx} ${ry} 0 0 0 0 ${-ry} Z`} fill={CARD_COLORS[b].base} />
-      <path d={`M0 0 L0 ${ry} A ${rx} ${ry} 0 0 0 ${rx} 0 Z`} fill={CARD_COLORS[c].base} />
-      <path d={`M0 0 L${-rx} 0 A ${rx} ${ry} 0 0 0 0 ${ry} Z`} fill={CARD_COLORS[d].base} />
+      <path d={`M0 0 L0 ${-ry} A ${rx} ${ry} 0 0 0 ${-rx} 0 Z`} fill={pal[a].base} />
+      <path d={`M0 0 L${rx} 0 A ${rx} ${ry} 0 0 0 0 ${-ry} Z`} fill={pal[b].base} />
+      <path d={`M0 0 L0 ${ry} A ${rx} ${ry} 0 0 0 ${rx} 0 Z`} fill={pal[c].base} />
+      <path d={`M0 0 L${-rx} 0 A ${rx} ${ry} 0 0 0 0 ${ry} Z`} fill={pal[d].base} />
       <ellipse rx={rx} ry={ry} fill="none" stroke="#fff" strokeWidth={stroke} />
     </g>
   );
 }
 
-// ── back ────────────────────────────────────────────────────
+// ── shared defs ─────────────────────────────────────────────
 
-function Back() {
-  return (
-    <>
-      <rect width="120" height="186" rx="12" fill="#fff" />
-      <rect x="5" y="5" width="110" height="176" rx="8.5" fill="#1d1828" />
-      <ellipse
-        cx={OVAL.cx}
-        cy={OVAL.cy}
-        rx={OVAL.rx + 1}
-        ry={OVAL.ry + 2}
-        transform={`rotate(${OVAL.rot} ${OVAL.cx} ${OVAL.cy})`}
-        fill="url(#nb-red)"
-      />
-      <path d="M5 13 Q5 5 13 5 H80 L5 96 Z" fill="url(#n-sheen)" />
-      <g transform="rotate(-20 60 93)" style={DISPLAY} textAnchor="middle" fontSize="38">
-        <text x="62.5" y="109" fill={INK}>
-          NUNO
-        </text>
-        <text x="60" y="106" fill="#ffd21f" strokeWidth="6" {...outlined}>
-          NUNO
-        </text>
-      </g>
-    </>
-  );
-}
-
-/** Shared gradients for every card. Rendered once at the app root. */
+/** Shared gradients and patterns for every card. Rendered once at the app root. */
 export function CardDefs() {
+  const theme = useTheme();
+  const pal = theme.cardColors;
+  const Defs = theme.Defs;
   return (
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true" focusable="false">
       <defs>
-        {(Object.keys(CARD_COLORS) as Color[]).map((k) => (
+        {(Object.keys(pal) as Color[]).map((k) => (
           <linearGradient key={k} id={`nf-${k}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor={CARD_COLORS[k].light} />
-            <stop offset="0.5" stopColor={CARD_COLORS[k].base} />
-            <stop offset="1" stopColor={CARD_COLORS[k].dark} />
+            <stop offset="0" stopColor={pal[k].light} />
+            <stop offset="0.5" stopColor={pal[k].base} />
+            <stop offset="1" stopColor={pal[k].dark} />
           </linearGradient>
         ))}
         <linearGradient id="nf-wild" x1="0" y1="0" x2="1" y2="1">
@@ -575,6 +578,10 @@ export function CardDefs() {
           <stop offset="0" stopColor="#fff" stopOpacity="0.35" />
           <stop offset="1" stopColor="#fff" stopOpacity="0" />
         </linearGradient>
+        <clipPath id="n-backclip">
+          <rect x="5" y="5" width="110" height="176" rx="8.5" />
+        </clipPath>
+        {Defs && <Defs />}
       </defs>
     </svg>
   );

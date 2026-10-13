@@ -1,8 +1,50 @@
-import { pickPersonas } from '../game/bot';
+import { BOT_PERSONAS, pickPersonas as pickFrom, type BotPersona } from '../game/bot';
 import { createGame, toView } from '../game/engine';
-import { GameHost } from '../game/host';
+import { GameHost, type BotMoment } from '../game/host';
 import type { Action, GameView, Intent, SeatConfig } from '../game/types';
+import { getSettings } from '../lib/settings';
+import { botTaunt, findTaunt, THEME_BOTS } from '../lib/taunts';
+import { artFor, characterAvatar } from '../themes/characters';
 import type { ChatMessage, ClientMessage, LobbySeat, LobbyState, RoomOptions, ServerMessage } from './protocol';
+
+/**
+ * Bots dress for the theme the host is using: character pictures you've added
+ * for that theme come first, then the theme's own nicknames.
+ */
+function pickPersonas(count: number, exclude: string[] = []): BotPersona[] {
+  const theme = getSettings().theme;
+  const chars = artFor(theme)
+    .characters.map((c) => ({ name: c.name, avatar: characterAvatar(c) }))
+    .filter((c) => !exclude.includes(c.avatar) && !exclude.includes(c.name));
+  const fromArt = pickFrom(Math.min(count, chars.length), [], chars);
+  const rest = pickFrom(count - fromArt.length, [...exclude, ...fromArt.map((p) => p.avatar)], THEME_BOTS[theme] ?? BOT_PERSONAS);
+  return [...fromArt, ...rest];
+}
+
+const newId = () => Math.random().toString(36).slice(2);
+
+/** Lets bots trash talk now and then, without flooding the table. */
+function botTalker(seatOf: () => { name: string; avatar: string }[], say: (msg: ChatMessage) => void) {
+  let lastAny = 0;
+  const lastBy = new Map<number, number>();
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const talk = (seat: number, moment: BotMoment, delayMs: number) => {
+    const chance = moment === 'win' ? 0.6 : moment === 'hit' || moment === 'attack' ? 0.35 : 0.22;
+    const at = Date.now() + delayMs;
+    if (Math.random() > chance || at - lastAny < 4500 || at - (lastBy.get(seat) ?? 0) < 12000) return;
+    const taunt = botTaunt(moment, getSettings().theme);
+    if (!taunt) return;
+    lastAny = at;
+    lastBy.set(seat, at);
+    const timer = setTimeout(() => {
+      timers.delete(timer);
+      const p = seatOf()[seat];
+      if (p) say({ id: newId(), sender: p.name, avatar: p.avatar, text: taunt.text, time: Date.now(), seat, taunt: taunt.id });
+    }, delayMs + 250);
+    timers.add(timer);
+  };
+  return { talk, stop: () => timers.forEach(clearTimeout) };
+}
 
 type Peer = import('peerjs').Peer;
 type DataConnection = import('peerjs').DataConnection;
@@ -21,6 +63,8 @@ export interface Session {
   mySeat: number;
   sendAction: (intent: Intent) => void;
   sendChat: (text: string) => void;
+  /** Fling a ready-made trash-talk line at the table. */
+  sendTaunt: (id: string) => void;
   startGame?: () => void;
   updateSeat?: (index: number, kind: 'bot' | 'human') => void;
   updateOptions?: (opts: Partial<RoomOptions>) => void;
@@ -37,6 +81,10 @@ export class LocalSession implements Session {
   readonly mySeat = 0;
   private host: GameHost | null = null;
   private unsub?: () => void;
+  private talker = botTalker(
+    () => this.host?.state.players ?? [],
+    (msg) => this.events.onChat(msg),
+  );
 
   constructor(
     private playerName: string,
@@ -57,6 +105,7 @@ export class LocalSession implements Session {
 
     const state = createGame(seats, this.options.targetScore, this.options.mode);
     this.host = new GameHost(state, this.options.difficulty);
+    this.host.onBotMoment = this.talker.talk;
     this.unsub = this.host.subscribe((s) => {
       this.events.onView(toView(s, 0));
     });
@@ -75,7 +124,7 @@ export class LocalSession implements Session {
 
   sendChat(text: string) {
     const msg: ChatMessage = {
-      id: Math.random().toString(36).slice(2),
+      id: newId(),
       sender: this.playerName,
       avatar: this.playerAvatar,
       text,
@@ -85,7 +134,14 @@ export class LocalSession implements Session {
     this.events.onChat(msg);
   }
 
+  sendTaunt(id: string) {
+    const taunt = findTaunt(id);
+    if (!taunt) return;
+    this.events.onChat({ id: newId(), sender: this.playerName, avatar: this.playerAvatar, text: taunt.text, time: Date.now(), seat: 0, taunt: id });
+  }
+
   destroy() {
+    this.talker.stop();
     this.unsub?.();
     this.host?.destroy();
   }
@@ -103,6 +159,12 @@ export class HostSession implements Session {
   private unsub?: () => void;
   private lobby: LobbyState;
   private destroyed = false;
+  /** When each seat last trash talked (simple flood control). */
+  private lastTaunt = new Map<number, number>();
+  private talker = botTalker(
+    () => this.host?.state.players ?? [],
+    (msg) => this.broadcastChat(msg),
+  );
 
   constructor(
     public roomId: string,
@@ -238,7 +300,7 @@ export class HostSession implements Session {
 
       // Broadcast system chat
       this.broadcastChat({
-        id: Math.random().toString(36).slice(2),
+        id: newId(),
         sender: 'NUNO',
         avatar: '📢',
         text: `${msg.name} joined the room!`,
@@ -261,12 +323,15 @@ export class HostSession implements Session {
       if (seat !== -1 && this.host) {
         this.host.dispatch({ ...msg.intent, player: seat } as Action);
       }
+    } else if (msg.type === 'taunt') {
+      const seat = this.getSeatForConnection(conn);
+      if (seat !== -1) this.taunt(seat, msg.id);
     } else if (msg.type === 'chat') {
       const seat = this.getSeatForConnection(conn);
       if (seat !== -1) {
         const p = this.lobby.seats[seat];
         this.broadcastChat({
-          id: Math.random().toString(36).slice(2),
+          id: newId(),
           sender: p.name,
           avatar: p.avatar,
           text: String(msg.text).slice(0, 100),
@@ -283,7 +348,7 @@ export class HostSession implements Session {
       this.connections.delete(seat);
       const prevName = this.lobby.seats[seat].name;
       // Convert seat to Bot so game doesn't stall
-      const bot = pickPersonas(1)[0];
+      const bot = pickPersonas(1, this.lobby.seats.map((x) => x.avatar))[0];
       this.lobby.seats[seat] = {
         name: `${bot.name} (sub)`,
         avatar: bot.avatar,
@@ -291,7 +356,7 @@ export class HostSession implements Session {
       };
 
       this.broadcastChat({
-        id: Math.random().toString(36).slice(2),
+        id: newId(),
         sender: 'NUNO',
         avatar: '🤖',
         text: `${prevName} disconnected — ${bot.name} took over their seat.`,
@@ -343,6 +408,7 @@ export class HostSession implements Session {
 
     const state = createGame(seats, this.lobby.options.targetScore, this.lobby.options.mode);
     this.host = new GameHost(state, this.lobby.options.difficulty);
+    this.host.onBotMoment = this.talker.talk;
 
     this.unsub = this.host.subscribe((s) => {
       // Local view
@@ -368,7 +434,7 @@ export class HostSession implements Session {
   updateSeat(index: number, kind: 'bot' | 'human') {
     if (this.lobby.inGame || index <= 0 || index >= this.lobby.seats.length) return;
     if (kind === 'bot') {
-      const persona = pickPersonas(1)[0];
+      const persona = pickPersonas(1, this.lobby.seats.map((x) => x.avatar))[0];
       this.lobby.seats[index] = {
         name: persona.name,
         avatar: persona.avatar,
@@ -389,7 +455,7 @@ export class HostSession implements Session {
     if (opts.playerCount && opts.playerCount !== this.lobby.seats.length) {
       const target = Math.max(2, Math.min(10, opts.playerCount));
       while (this.lobby.seats.length < target) {
-        const bot = pickPersonas(1)[0];
+        const bot = pickPersonas(1, this.lobby.seats.map((x) => x.avatar))[0];
         this.lobby.seats.push({ name: bot.name, avatar: bot.avatar, kind: 'bot' });
       }
       while (this.lobby.seats.length > target) {
@@ -410,7 +476,7 @@ export class HostSession implements Session {
 
   sendChat(text: string) {
     this.broadcastChat({
-      id: Math.random().toString(36).slice(2),
+      id: newId(),
       sender: this.playerName,
       avatar: this.playerAvatar,
       text,
@@ -419,8 +485,23 @@ export class HostSession implements Session {
     });
   }
 
+  sendTaunt(id: string) {
+    this.taunt(0, id);
+  }
+
+  /** Trash talk from a seat: only known lines, and not too often. */
+  private taunt(seat: number, id: string) {
+    const taunt = findTaunt(id);
+    const now = Date.now();
+    if (!taunt || now - (this.lastTaunt.get(seat) ?? 0) < 1500) return;
+    this.lastTaunt.set(seat, now);
+    const p = this.lobby.seats[seat];
+    this.broadcastChat({ id: newId(), sender: p.name, avatar: p.avatar, text: taunt.text, time: now, seat, taunt: taunt.id });
+  }
+
   destroy() {
     this.destroyed = true;
+    this.talker.stop();
     this.unsub?.();
     this.host?.destroy();
     for (const c of this.connections.values()) c.close();
@@ -533,6 +614,10 @@ export class ClientSession implements Session {
 
   sendChat(text: string) {
     this.conn?.send({ type: 'chat', text } as ClientMessage);
+  }
+
+  sendTaunt(id: string) {
+    this.conn?.send({ type: 'taunt', id } as ClientMessage);
   }
 
   destroy() {

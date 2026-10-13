@@ -4,23 +4,31 @@
 // ─────────────────────────────────────────────────────────────
 import { decideBot, rand, TUNING } from './bot';
 import { actor, changeSeatKind, reduce } from './engine';
-import { dealPause, WHEEL_SPIN_MS } from './timing';
-import type { Action, Difficulty, GameState, PlayerKind } from './types';
+import { eventsDuration, paceScale } from './timing';
+import type { Action, Difficulty, GameEvent, GameState, PlayerKind } from './types';
 
 type Listener = (s: GameState) => void;
+
+/** Moments a bot might want to trash talk about. */
+export type BotMoment = 'attack' | 'hit' | 'win' | 'caught' | 'busted' | 'uno' | 'skip' | 'swap' | 'knockout';
+
+const DRAW_ATTACKS = new Set(['draw2', 'wild4', 'stack', 'card', 'challenge', 'roulette']);
 
 export class GameHost {
   state: GameState;
   readonly difficulty: Difficulty;
+  /** Called when a bot has something to say about what just happened. */
+  onBotMoment?: (seat: number, moment: BotMoment, delayMs: number) => void;
   private listeners = new Set<Listener>();
   private turnTimer: ReturnType<typeof setTimeout> | undefined;
   private sideTimers: ReturnType<typeof setTimeout>[] = [];
   private raceTimers: ReturnType<typeof setTimeout>[] = [];
   private lastVulnerable: number | null = null;
   private lastRace = -1;
-  private lastSpin = -1;
   private destroyed = false;
-  private dealtRound = 0;
+  /** Newest event already accounted for in the animation hold. */
+  private seenSeq = 0;
+  /** The table is busy showing moves until this time (ms since epoch). */
   private holdUntil = 0;
 
   constructor(state: GameState, difficulty: Difficulty) {
@@ -53,7 +61,8 @@ export class GameHost {
   replace(state: GameState) {
     this.lastVulnerable = null;
     this.lastRace = -1;
-    this.dealtRound = 0;
+    this.seenSeq = 0;
+    this.holdUntil = 0;
     this.setState(state);
   }
 
@@ -71,28 +80,30 @@ export class GameHost {
     this.tick();
   }
 
+  /** Time left until the table has shown everything that happened so far. */
+  private busyFor(): number {
+    return Math.max(0, this.holdUntil - Date.now());
+  }
+
+  /** Adds the animation time of any new events to the hold, like the table's own timeline. */
+  private absorbEvents(s: GameState) {
+    const newest = s.events.length ? s.events[s.events.length - 1].seq : 0;
+    if (newest < this.seenSeq) this.seenSeq = 0; // a new game restarted the counter
+    const fresh = s.events.filter((e) => e.seq > this.seenSeq);
+    this.seenSeq = newest;
+    if (!fresh.length) return;
+    const start = Math.max(Date.now(), this.holdUntil);
+    this.holdUntil = start + eventsDuration(fresh, s.players.length);
+    this.botMoments(s, fresh);
+  }
+
   private tick() {
     if (this.destroyed) return;
     clearTimeout(this.turnTimer);
     const s = this.state;
     const t = TUNING[this.difficulty];
-
-    // ── A fresh round: let the deal animation finish before anyone moves.
-    if (s.round !== this.dealtRound) {
-      this.dealtRound = s.round;
-      this.holdUntil = Date.now() + dealPause(s.players.length);
-    }
-
-    // ── Spin: let everyone watch the wheel stop before anyone reacts.
-    for (let i = s.events.length - 1; i >= 0; i--) {
-      const e = s.events[i];
-      if (e.type !== 'spin') continue;
-      if (e.seq !== this.lastSpin) {
-        this.lastSpin = e.seq;
-        this.holdUntil = Math.max(this.holdUntil, Date.now() + WHEEL_SPIN_MS + 900);
-      }
-      break;
-    }
+    const pace = paceScale();
+    this.absorbEvents(s);
 
     // ── UNO catch window: let bots (try to) catch, and let forgetful bots remember late.
     if (s.unoVulnerable !== null) {
@@ -113,14 +124,14 @@ export class GameHost {
       return;
     }
 
-    // ── Whose move is it?
+    // ── Whose move is it? Bots only start "thinking" once the table has caught up.
     const who = actor(s);
     if (who === null || s.players[who].kind !== 'bot') return;
-    let delay = s.phase === 'launch' ? rand(450, 850) : s.phase === 'spin' ? rand(700, 1200) : rand(...t.thinkMs);
+    let think = s.phase === 'launch' ? rand(500, 900) : s.phase === 'spin' ? rand(700, 1200) : rand(...t.thinkMs);
     // Give humans a fair chance to hit CATCH before the next bot moves on.
-    if (s.unoVulnerable !== null && s.unoVulnerable !== who) delay += 1500;
-    if (s.phase === 'challenge') delay += 500;
-    delay = Math.max(delay, this.holdUntil - Date.now());
+    if (s.unoVulnerable !== null && s.unoVulnerable !== who) think += 1600;
+    if (s.phase === 'challenge') think += 600;
+    const delay = this.busyFor() + think * pace;
     this.turnTimer = setTimeout(() => {
       const a = decideBot(this.state, who, this.difficulty);
       if (a) this.dispatch(a);
@@ -138,7 +149,7 @@ export class GameHost {
           () => {
             if (this.state.phase === 'unoSpinRace') this.dispatch({ type: 'unoSpin', player: i });
           },
-          Math.max(0, this.holdUntil - Date.now()) + rand(...t.raceDelay),
+          this.busyFor() + rand(...t.raceDelay) * paceScale(),
         ),
       );
     });
@@ -149,6 +160,8 @@ export class GameHost {
     this.sideTimers = [];
     const s = this.state;
     const t = TUNING[this.difficulty];
+    // Nobody can react to a card that is still flying to the pile.
+    const wait = this.busyFor();
 
     s.players.forEach((p, i) => {
       if (i === target || p.kind !== 'bot' || p.out) return;
@@ -158,7 +171,7 @@ export class GameHost {
             () => {
               if (this.state.unoVulnerable === target) this.dispatch({ type: 'catch', player: i, target });
             },
-            rand(...t.catchDelay),
+            wait + rand(...t.catchDelay),
           ),
         );
       }
@@ -170,9 +183,51 @@ export class GameHost {
           () => {
             if (this.state.unoVulnerable === target) this.dispatch({ type: 'uno', player: target });
           },
-          rand(800, 2400),
+          wait + rand(700, 2000),
         ),
       );
+    }
+  }
+
+  /** Spots things bots like to brag (or moan) about. The session decides what they say. */
+  private botMoments(s: GameState, fresh: GameEvent[]) {
+    if (!this.onBotMoment) return;
+    const isBot = (i: number | undefined) => i !== undefined && s.players[i]?.kind === 'bot';
+    const after = this.busyFor();
+    let lastPlayer: number | undefined;
+    for (const e of fresh) {
+      switch (e.type) {
+        case 'play':
+          lastPlayer = e.player;
+          break;
+        case 'draw':
+          if (DRAW_ATTACKS.has(e.reason) && e.count >= 2) {
+            if (isBot(lastPlayer) && lastPlayer !== e.player) this.onBotMoment(lastPlayer!, 'attack', after);
+            else if (isBot(e.player) && e.count >= 4) this.onBotMoment(e.player, 'hit', after);
+          }
+          break;
+        case 'skip':
+          if (isBot(lastPlayer) && lastPlayer !== e.player) this.onBotMoment(lastPlayer!, 'skip', after);
+          break;
+        case 'swap':
+          if (isBot(e.a)) this.onBotMoment(e.a, 'swap', after);
+          break;
+        case 'caught':
+          if (isBot(e.by)) this.onBotMoment(e.by, 'caught', after);
+          else if (isBot(e.player)) this.onBotMoment(e.player, 'busted', after);
+          break;
+        case 'uno':
+          if (isBot(e.player)) this.onBotMoment(e.player, 'uno', after);
+          break;
+        case 'eliminated':
+          if (isBot(lastPlayer) && lastPlayer !== e.player) this.onBotMoment(lastPlayer!, 'knockout', after);
+          break;
+        case 'roundOver':
+          if (isBot(e.winner)) this.onBotMoment(e.winner, 'win', after);
+          break;
+        default:
+          break;
+      }
     }
   }
 }
