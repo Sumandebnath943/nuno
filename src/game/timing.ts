@@ -25,6 +25,14 @@ export function dealStagger(players: number): number {
   return Math.max(30, Math.min(95, 2100 / (7 * players))) * scale;
 }
 
+/** The dealer riffles the deck before the cards go out. */
+export const RIFFLE_MS = 640;
+
+/** How long the shuffle before a deal takes at the current pace. */
+export function riffleMs(): number {
+  return RIFFLE_MS * scale;
+}
+
 /** How long the Spin wheel takes to stop. */
 export const WHEEL_SPIN_MS = 2600;
 
@@ -51,7 +59,7 @@ export function eventBeat(e: GameEventBody, players: number, fast = false): numb
   let ms: number;
   switch (e.type) {
     case 'deal':
-      return (fast ? 7 * players * 10 : 7 * players * dealStagger(players)) + flightMs() * 0.6 * f;
+      return (fast ? 7 * players * 10 : riffleMs() + 7 * players * dealStagger(players)) + flightMs() * 0.6 * f;
     case 'firstCard':
       ms = flight + 350;
       break;

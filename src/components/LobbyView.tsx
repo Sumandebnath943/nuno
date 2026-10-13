@@ -9,8 +9,10 @@ import { sfx } from '../lib/sound';
 import { AmbientCanvas } from './ThemeStage';
 import { Avatar } from './Avatar';
 import { useTheme } from '../themes';
+import { artFor } from '../themes/characters';
 import { useVoice, VoiceBar } from './VoiceControls';
 import type { SettingsTab } from './SettingsModal';
+import { shareInvite } from '../lib/share';
 
 interface Props {
   lobby: LobbyState;
@@ -48,6 +50,7 @@ export const LobbyView: React.FC<Props> = ({
   onOpenSettings,
 }) => {
   const theme = useTheme();
+  const art = artFor(theme.id);
   const snap = useVoice(voice);
   const [chatInput, setChatInput] = useState('');
   const [picking, setPicking] = useState(false);
@@ -68,11 +71,13 @@ export const LobbyView: React.FC<Props> = ({
     chatEnd.current?.scrollIntoView({ block: 'nearest' });
   }, [chatMessages.length]);
 
-  const copyInvite = () => {
-    navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?room=${lobby.roomId}`);
+  const copyInvite = async () => {
     sfx.pop();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const how = await shareInvite(lobby.roomId);
+    if (how === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const send = (e: React.FormEvent) => {
@@ -99,6 +104,24 @@ export const LobbyView: React.FC<Props> = ({
 
   const peerOf = (idx: number) => (idx === hostSeat ? lobby.hostPeerId : lobby.seats[idx]?.peerId);
 
+  const start = isHost ? (
+    <button
+      onClick={() => {
+        sfx.deal();
+        onStartGame();
+      }}
+      disabled={connecting}
+      className="btn btn-green h-14 w-full text-2xl lg:h-16"
+    >
+      {connecting ? 'Opening room…' : 'Start game!'}
+    </button>
+  ) : (
+    <div className="panel flex h-14 items-center justify-center gap-3 lg:h-16">
+      <span className="text-3xl animate-wiggle">🎲</span>
+      <span className="font-ui text-lg">Waiting for the host to start…</span>
+    </div>
+  );
+
   return (
     <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden">
       <AmbientCanvas />
@@ -124,9 +147,17 @@ export const LobbyView: React.FC<Props> = ({
         </div>
       </header>
 
-      <main className="nice-scroll relative mx-auto grid min-h-0 w-full max-w-6xl flex-1 gap-3 overflow-y-auto px-3 pb-4 sm:gap-4 sm:px-4 lg:grid-cols-[1fr_340px]">
+      {/* Phones: one column of sections at their natural height, scrolling. Desktop: two columns filling the screen. */}
+      <main className="nice-scroll relative mx-auto grid min-h-0 w-full max-w-6xl flex-1 content-start gap-3 overflow-y-auto px-3 pb-[calc(88px+env(safe-area-inset-bottom))] sm:gap-4 sm:px-4 lg:grid-cols-[1fr_340px] lg:content-stretch lg:pb-4">
+        {/* Phones: voice chat first, it's what you reach for while friends join. */}
+        {voice && snap && (
+          <div className="lg:hidden">
+            <VoiceBar voice={voice} snap={snap} />
+          </div>
+        )}
+
         {/* Seats + options */}
-        <section className="panel flex min-h-0 flex-col p-3 sm:p-5">
+        <section className="panel flex flex-col p-3 sm:p-5 lg:min-h-0">
           <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
             <h2 className="font-display text-2xl">
               Players <span className="text-[var(--muted)]">({lobby.seats.length})</span>
@@ -146,8 +177,8 @@ export const LobbyView: React.FC<Props> = ({
                 <div
                   key={idx}
                   className={`flex items-center gap-3 rounded-2xl border-[2.5px] border-[var(--ink)] px-3 py-2 ${
-                    isMe ? 'bg-[var(--highlight)]' : seat.kind === 'bot' ? 'bg-[var(--panel-3)]' : 'bg-[var(--surface)]'
-                  }`}
+                    isMe ? 'bg-[var(--highlight)]' : seat.kind === 'bot' || seat.away ? 'bg-[var(--panel-3)]' : 'bg-[var(--surface)]'
+                  } ${seat.away ? 'border-dashed' : ''}`}
                 >
                   <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--surface)] text-2xl">
                     <Avatar value={seat.avatar} fill />
@@ -158,7 +189,13 @@ export const LobbyView: React.FC<Props> = ({
                     <div className="font-body flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)]">
                       {idx === hostSeat && <Tag className="bg-[var(--yellow)]">Host</Tag>}
                       {isMe && <Tag className="bg-[var(--surface)]">You</Tag>}
-                      {seat.kind === 'bot' ? <span>🤖 Bot · seat open</span> : idx !== hostSeat && <span>🌐 Online</span>}
+                      {seat.kind === 'bot' ? (
+                        <span>🤖 Bot · seat open</span>
+                      ) : seat.away ? (
+                        <span className="text-[#a3121a]">📶 Reconnecting… seat held</span>
+                      ) : (
+                        idx !== hostSeat && <span>🌐 Online</span>
+                      )}
                       {vs?.mic && <span title="Mic on">🎙️</span>}
                     </div>
                   </div>
@@ -204,12 +241,17 @@ export const LobbyView: React.FC<Props> = ({
                 className="group relative flex h-[56px] w-full items-center gap-3 overflow-hidden rounded-2xl border-[2.5px] border-[var(--ink)] px-2.5 text-left shadow-[0_3px_0_var(--ink)]"
                 style={{ background: theme.vars['--room-bg'] ?? 'linear-gradient(90deg, #3b2f86, #17143d)' }}
               >
-                <span className="text-2xl drop-shadow">{theme.emoji}</span>
-                <span className="min-w-0 flex-1 leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.6)' }}>
+                {art.backdrop && <img src={art.backdrop.soft ?? art.backdrop.url} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
+                <span className="absolute inset-0 bg-gradient-to-r from-black/75 to-black/35" aria-hidden="true" />
+                <span className="relative text-2xl drop-shadow">{theme.emoji}</span>
+                <span
+                  className="relative min-w-0 flex-1 leading-tight text-white"
+                  style={{ textShadow: '0 2px 0 rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.75), 1px 0 0 rgba(0,0,0,0.6), -1px 0 0 rgba(0,0,0,0.6)' }}
+                >
                   <span className="font-display block truncate text-lg">{theme.title}</span>
                   <span className="font-body block text-xs font-semibold">{isHost ? 'Everyone plays in your theme' : 'Picked by the host'}</span>
                 </span>
-                {isHost && <span className="chip shrink-0 px-2.5 py-1 text-sm">Change</span>}
+                {isHost && <span className="chip relative shrink-0 px-2.5 py-1 text-sm">Change</span>}
               </button>
             </OptionGroup>
           </div>
@@ -262,9 +304,13 @@ export const LobbyView: React.FC<Props> = ({
         </section>
 
         {/* Voice + chat + start */}
-        <section className="flex min-h-[320px] flex-col gap-3 sm:gap-4">
-          {voice && snap && <VoiceBar voice={voice} snap={snap} />}
-          <div className="panel flex min-h-0 flex-1 flex-col p-3">
+        <section className="flex flex-col gap-3 sm:gap-4 lg:min-h-[320px]">
+          {voice && snap && (
+            <div className="hidden lg:block">
+              <VoiceBar voice={voice} snap={snap} />
+            </div>
+          )}
+          <div className="panel flex min-h-[260px] flex-1 flex-col p-3 lg:min-h-0">
             <h3 className="font-display px-1 text-xl">Chat</h3>
             <div className="nice-scroll mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
               {chatMessages.length === 0 ? (
@@ -305,25 +351,17 @@ export const LobbyView: React.FC<Props> = ({
             </form>
           </div>
 
-          {isHost ? (
-            <button
-              onClick={() => {
-                sfx.deal();
-                onStartGame();
-              }}
-              disabled={connecting}
-              className="btn btn-green h-16 w-full text-2xl"
-            >
-              {connecting ? 'Opening room…' : 'Start game!'}
-            </button>
-          ) : (
-            <div className="panel flex h-16 items-center justify-center gap-3">
-              <span className="text-3xl animate-wiggle">🎲</span>
-              <span className="font-ui text-lg">Waiting for the host to start…</span>
-            </div>
-          )}
+          <div className="hidden lg:block">{start}</div>
         </section>
       </main>
+
+      {/* Phones: Start stays at the bottom of the screen, within thumb reach. */}
+      <div
+        className="absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-6 lg:hidden"
+        style={{ background: 'linear-gradient(180deg, rgba(8,6,22,0), rgba(8,6,22,0.75) 45%)' }}
+      >
+        {start}
+      </div>
 
       <ModePicker open={picking} value={mode} onClose={() => setPicking(false)} onPick={pickMode} onRules={onOpenRules} />
     </div>

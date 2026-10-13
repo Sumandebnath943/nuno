@@ -18,10 +18,15 @@ export function luminance(hex: string): number {
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 }
 
+/** Contrast ratio between two #rrggbb colours (1–21). */
+export function contrast(a: string, b: string): number {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+
 /** Ink or white, whichever reads better on this background. */
 export function readableOn(hex: string): { color: string; shadow: string } {
-  // Above ~0.22, dark text has more contrast than white.
-  return luminance(hex) > 0.22 ? { color: INK, shadow: 'none' } : { color: '#fff', shadow: `0 1px 0 ${INK}` };
+  return contrast(INK, hex) > contrast('#ffffff', hex) ? { color: INK, shadow: 'none' } : { color: '#fff', shadow: `0 1px 0 ${INK}` };
 }
 
 /** Badge backgrounds for each game mode. */

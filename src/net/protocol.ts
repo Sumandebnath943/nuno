@@ -14,6 +14,8 @@ export interface LobbySeat {
   kind: 'human' | 'bot' | 'remote';
   peerId?: string;
   ready?: boolean;
+  /** Lost their connection; the seat is held for them for a while. */
+  away?: boolean;
 }
 
 export interface LobbyState {
@@ -58,7 +60,8 @@ export type ServerMessage =
 
 // Client -> Host messages
 export type ClientMessage =
-  | { type: 'join'; name: string; avatar: string }
+  /** `clientId` stays the same when a player reconnects, so they get their seat back. */
+  | { type: 'join'; name: string; avatar: string; clientId?: string }
   | { type: 'action'; intent: Intent }
   | { type: 'chat'; text: string }
   | { type: 'taunt'; id: string }

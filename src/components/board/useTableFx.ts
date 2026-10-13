@@ -12,7 +12,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { Card, Color, DistributiveOmit, GameEvent, GameMode, GameView, WheelSegment } from '../../game/types';
 import { COLOR_NAMES } from '../../game/cards';
 import { drawValue, isStackable } from '../../game/modes';
-import { dealStagger, drawGap, eventBeat, flightMs, splashMs, WHEEL_SPIN_MS } from '../../game/timing';
+import { dealStagger, drawGap, eventBeat, flightMs, riffleMs, splashMs, WHEEL_SPIN_MS } from '../../game/timing';
 import { sfx } from '../../lib/sound';
 import { buzz } from '../../lib/haptics';
 import { WHEEL_INFO } from '../../lib/modeGuide';
@@ -129,6 +129,8 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
   const [reveal, setReveal] = useState<Reveal | null>(null);
   const [wheelSpin, setWheelSpin] = useState<WheelSpin | null>(null);
   const [launcherShots, setLauncherShots] = useState(0);
+  /** Bumps when the dealer shuffles, to play the riffle on the deck. */
+  const [riffles, setRiffles] = useState(0);
   const [cutIn, setCutIn] = useState<CutInData | null>(null);
   const [fxColor, setFxColor] = useState<Color | null>(() => (view.phase === 'chooseColor' ? null : view.currentColor));
   const [settled, setSettled] = useState(true);
@@ -398,11 +400,18 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
         case 'deal': {
           const stagger = fast ? 10 : dealStagger(n);
           setBubbles({});
-          at(t, () => playFx({ kind: 'deal', at: deckPt() }));
+          // The deck gets a riffle shuffle first, then the cards go round.
+          const start = t + (fast ? 0 : riffleMs());
+          if (!fast)
+            at(t, () => {
+              setRiffles((x) => x + 1);
+              sfx.deal();
+            });
+          at(start, () => playFx({ kind: 'deal', at: deckPt() }));
           for (let r = 0; r < 7; r++) {
             for (let k = 1; k <= n; k++) {
               const seat = (ev.dealer + k) % n;
-              const delay = t + (r * n + (k - 1)) * stagger;
+              const delay = start + (r * n + (k - 1)) * stagger;
               if (seat === me) {
                 const id = queue.shift();
                 if (!id) continue;
@@ -415,7 +424,7 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
               }
             }
           }
-          for (let i = 0; i < Math.ceil((7 * n) / 6); i++) at(t + i * 6 * stagger, () => sfx.deal());
+          for (let i = 0; i < Math.ceil((7 * n) / 6); i++) at(start + i * 6 * stagger, () => sfx.deal());
           break;
         }
 
@@ -811,6 +820,7 @@ export function useTableFx(view: GameView, anchors: React.MutableRefObject<Ancho
     reveal,
     wheelSpin,
     launcherShots,
+    riffles,
     cutIn,
     fxColor,
     settled,

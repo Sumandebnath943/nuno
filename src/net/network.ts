@@ -6,6 +6,7 @@ import { getSettings, setRoomTheme, subscribeSettings, type ThemeId } from '../l
 import { botTaunt, findTaunt, THEME_BOTS } from '../lib/taunts';
 import { artFor, characterAvatar } from '../themes/characters';
 import { getIceServers } from './ice';
+import { clientToken, isTransientSignalError, keepSignalling } from './signal';
 import { mixSeats } from './seating';
 import { VoiceChat } from './voice';
 import type { ChatMessage, ClientMessage, LobbySeat, LobbyState, RoomOptions, ServerMessage, VoiceState } from './protocol';
@@ -58,7 +59,15 @@ export interface SessionEvents {
   onError: (err: string) => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
+  /**
+   * Connection trouble that sorts itself out: `reconnecting` (the link dropped,
+   * usually because the game was in the background), `waiting` (the host can't
+   * be reached yet), `reopening` (a reloaded page getting its room back). Null when fine.
+   */
+  onStatus?: (status: ConnStatus | null) => void;
 }
+
+export type ConnStatus = 'reconnecting' | 'waiting' | 'reopening';
 
 export interface Session {
   isHost: boolean;
@@ -161,6 +170,37 @@ export class LocalSession implements Session {
 // ─────────────────────────────────────────────────────────────
 // 2. HOST SESSION (Authoritative server using WebRTC PeerJS)
 // ─────────────────────────────────────────────────────────────
+
+/** How long a lobby seat is held for someone who dropped out (switched apps, lost signal). */
+const LOBBY_HOLD_MS = 2 * 60 * 1000;
+/** How long a hosted room is remembered, so a reloaded page reopens it. */
+const HOSTING_KEY = 'nuno.hosting';
+
+export interface HostedRoom {
+  roomId: string;
+  options: RoomOptions;
+}
+
+/** The room this tab was hosting, if the page was reloaded (phones discard background tabs). */
+export function rememberedRoom(): HostedRoom | null {
+  try {
+    const raw = sessionStorage.getItem(HOSTING_KEY);
+    const room = raw ? (JSON.parse(raw) as HostedRoom) : null;
+    return room && typeof room.roomId === 'string' && room.options ? room : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberRoom(room: HostedRoom | null) {
+  try {
+    if (room) sessionStorage.setItem(HOSTING_KEY, JSON.stringify(room));
+    else sessionStorage.removeItem(HOSTING_KEY);
+  } catch {
+    // private mode: no reopening after a reload
+  }
+}
+
 export class HostSession implements Session {
   readonly isHost = true;
   private peer: Peer | null = null;
@@ -168,8 +208,14 @@ export class HostSession implements Session {
   private host: GameHost | null = null;
   private unsub?: () => void;
   private unsubSettings: () => void;
+  private stopSignal?: () => void;
   private lobby: LobbyState;
   private destroyed = false;
+  private everOpen = false;
+  /** Which player (by their tab's ID) sits where, so someone who drops out gets their seat back. */
+  private owners = new Map<string, number>();
+  private connOwner = new Map<DataConnection, string>();
+  private holdTimers = new Map<number, ReturnType<typeof setTimeout>>();
   /** When each seat last trash talked (simple flood control). */
   private lastTaunt = new Map<number, number>();
   /** Everyone's voice chat state, by peer id. */
@@ -187,6 +233,8 @@ export class HostSession implements Session {
     private playerAvatar: string,
     private options: RoomOptions,
     private events: SessionEvents,
+    /** Reopening a room after the page reloaded: wait for the old room code to free up. */
+    private reopening = false,
   ) {
     const theme = getSettings().ownTheme;
     this.lobby = {
@@ -201,6 +249,7 @@ export class HostSession implements Session {
     this.lobby.seats = this.buildSeats();
     // The host's theme is the room's: follow it when they change it.
     this.unsubSettings = subscribeSettings(() => this.followTheme());
+    rememberRoom({ roomId, options: this.lobby.options });
     this.initPeer();
   }
 
@@ -235,32 +284,56 @@ export class HostSession implements Session {
     this.broadcastLobby();
   }
 
-  private async initPeer() {
+  private async initPeer(attempt = 0) {
     try {
       const [{ Peer }, iceServers] = await Promise.all([import('peerjs'), getIceServers()]);
       if (this.destroyed) return;
       const peerId = `nuno-${this.roomId.toLowerCase()}-host`;
-      this.peer = new Peer(peerId, {
+      const peer = new Peer(peerId, {
         debug: 1,
         config: { iceServers },
       });
+      this.peer = peer;
 
-      this.peer.on('open', (id) => {
+      peer.on('open', (id) => {
+        if (this.peer !== peer || this.destroyed) return;
         this.lobby.hostPeerId = id;
-        this.voice.attach(this.peer!);
+        this.events.onStatus?.(null);
+        if (!this.everOpen) {
+          this.everOpen = true;
+          this.voice.attach(peer);
+          // Phones drop the link to PeerJS's server whenever the game goes to the
+          // background (sharing the invite is enough). Reconnect with the same
+          // room code so the link keeps working.
+          this.stopSignal = keepSignalling(peer, (state) => this.events.onStatus?.(state === 'reconnecting' ? 'reconnecting' : null));
+          this.events.onConnected?.();
+        }
         this.broadcastLobby();
-        this.events.onConnected?.();
       });
 
-      this.peer.on('connection', (conn) => {
+      peer.on('connection', (conn) => {
         this.handleIncomingConnection(conn);
       });
 
-      this.peer.on('error', (err) => {
-        if (this.destroyed) return;
+      peer.on('error', (err) => {
+        if (this.destroyed || this.peer !== peer) return;
         console.warn('PeerJS Host error:', err);
         // A voice link to someone who just left: nothing to tell the player.
         if (err.type === 'peer-unavailable') return;
+        // The room was open and the server link dropped: keepSignalling is on it.
+        if (this.everOpen && isTransientSignalError(err.type)) return;
+        // Reopening after a reload: the server may still hold our old room code for up to a minute.
+        if (err.type === 'unavailable-id' && this.reopening && attempt < 20) {
+          this.events.onStatus?.('reopening');
+          setTimeout(() => this.initPeer(attempt + 1), 4000);
+          return;
+        }
+        // Couldn't reach the server at all yet: try again a few times.
+        if (!this.everOpen && attempt < 4 && ['network', 'socket-error', 'socket-closed', 'server-error'].includes(err.type)) {
+          this.events.onStatus?.('reconnecting');
+          setTimeout(() => this.initPeer(attempt + 1), 2000 * (attempt + 1));
+          return;
+        }
         if (err.type === 'unavailable-id') {
           this.events.onError('Room code already in use. Please choose another code.');
         } else {
@@ -291,135 +364,158 @@ export class HostSession implements Session {
     });
   }
 
+  /** The seat this exact connection is using (not an older one from the same player). */
+  private seatOf(conn: DataConnection): number {
+    for (const [seat, c] of this.connections) if (c === conn) return seat;
+    return -1;
+  }
+
+  /** Seats someone else is entitled to come back to. */
+  private ownedByOther(seat: number, clientId: string): boolean {
+    for (const [id, s] of this.owners) if (s === seat && id !== clientId) return true;
+    return false;
+  }
+
+  private claim(seat: number, clientId: string) {
+    for (const [id, s] of this.owners) if (s === seat && id !== clientId) this.owners.delete(id);
+    this.owners.set(clientId, seat);
+  }
+
+  private release(seat: number) {
+    for (const [id, s] of this.owners) if (s === seat) this.owners.delete(id);
+    clearTimeout(this.holdTimers.get(seat));
+    this.holdTimers.delete(seat);
+  }
+
+  /** A free seat for a newcomer: a bot nobody is coming back to, then any bot, then a new seat. */
+  private openSeat(clientId: string): number {
+    const seats = this.lobby.seats;
+    const free = (i: number) => i !== this.lobby.hostSeat && (seats[i].kind === 'bot' || (!this.connections.has(i) && !seats[i].away));
+    for (let i = 0; i < seats.length; i++) if (free(i) && !this.ownedByOther(i, clientId)) return i;
+    for (let i = 0; i < seats.length; i++) if (free(i)) return i;
+    if (seats.length < 10 && !this.lobby.inGame) {
+      seats.push({ name: '', avatar: '', kind: 'bot' });
+      this.lobby.options.playerCount = seats.length;
+      return seats.length - 1;
+    }
+    return -1;
+  }
+
+  private handleJoin(conn: DataConnection, msg: Extract<ClientMessage, { type: 'join' }>) {
+    const clientId = typeof msg.clientId === 'string' && msg.clientId ? msg.clientId.slice(0, 64) : `peer:${conn.peer}`;
+    const name = String(msg.name || '').slice(0, 20);
+    const avatar = String(msg.avatar || '🎲').slice(0, 64);
+    this.connOwner.set(conn, clientId);
+
+    // Back after dropping out: the same seat, whether it was held or a bot covered it.
+    const known = this.owners.get(clientId);
+    const seats = this.lobby.seats;
+    const back = known !== undefined && known !== this.lobby.hostSeat && known < seats.length;
+    const seat = back ? known : this.openSeat(clientId);
+    if (seat === -1) {
+      conn.send({ type: 'error', message: 'Room is full' } as ServerMessage);
+      setTimeout(() => conn.close(), 300);
+      return;
+    }
+
+    // The same player on a newer connection: retire the old one.
+    const old = this.connections.get(seat);
+    this.connections.set(seat, conn);
+    if (old && old !== conn) {
+      this.connOwner.delete(old);
+      old.close();
+    }
+    this.claim(seat, clientId);
+    clearTimeout(this.holdTimers.get(seat));
+    this.holdTimers.delete(seat);
+    const shownName = name || `Player ${seat + 1}`;
+    seats[seat] = { name: shownName, avatar, kind: 'remote', peerId: conn.peer };
+
+    this.broadcastChat({
+      id: newId(),
+      sender: 'NUNO',
+      avatar: '📢',
+      text: back ? `${shownName} is back!` : `${shownName} joined the room!`,
+      time: Date.now(),
+      isSystem: true,
+    });
+    this.broadcastLobby();
+    conn.send({ type: 'voice', states: this.voiceStates } as ServerMessage);
+
+    if (this.lobby.inGame && this.host) {
+      if (this.host.state.players[seat]?.kind !== 'remote') this.host.setSeatKind(seat, 'remote', 'Reconnected');
+      conn.send({ type: 'view', view: toView(this.host.state, seat) } as ServerMessage);
+    }
+  }
+
   private handleClientMessage(conn: DataConnection, msg: ClientMessage) {
     if (msg.type === 'join') {
-      // Already seated (e.g. a repeated join message): just resend the lobby.
-      if (this.getSeatForConnection(conn) !== -1) {
-        this.broadcastLobby();
-        return;
-      }
-      // Find open seat
-      let assignedSeat = -1;
-      for (let i = 0; i < this.lobby.seats.length; i++) {
-        if (i === this.lobby.hostSeat) continue;
-        if (this.lobby.seats[i].kind === 'bot' || !this.connections.has(i)) {
-          assignedSeat = i;
-          break;
-        }
-      }
-
-      if (assignedSeat === -1) {
-        // Can we expand player count up to 10?
-        if (this.lobby.seats.length < 10 && !this.lobby.inGame) {
-          assignedSeat = this.lobby.seats.length;
-          this.lobby.seats.push({
-            name: msg.name || `Player ${assignedSeat + 1}`,
-            avatar: msg.avatar || '🎲',
-            kind: 'remote',
-            peerId: conn.peer,
-          });
-          this.lobby.options.playerCount = this.lobby.seats.length;
-        } else {
-          conn.send({ type: 'error', message: 'Room is full' } as ServerMessage);
-          conn.close();
-          return;
-        }
-      }
-
-      this.connections.set(assignedSeat, conn);
-      this.lobby.seats[assignedSeat] = {
-        name: msg.name || `Player ${assignedSeat + 1}`,
-        avatar: msg.avatar || '🎲',
-        kind: 'remote',
-        peerId: conn.peer,
-      };
-
-      // Broadcast system chat
+      this.handleJoin(conn, msg);
+      return;
+    }
+    const seat = this.seatOf(conn);
+    if (seat === -1) return;
+    if (msg.type === 'action') {
+      this.host?.dispatch({ ...msg.intent, player: seat } as Action);
+    } else if (msg.type === 'taunt') {
+      this.taunt(seat, msg.id);
+    } else if (msg.type === 'voice') {
+      this.setVoice(conn.peer, { mic: !!msg.mic, speaking: !!msg.speaking });
+    } else if (msg.type === 'chat') {
+      const p = this.lobby.seats[seat];
       this.broadcastChat({
         id: newId(),
-        sender: 'NUNO',
-        avatar: '📢',
-        text: `${msg.name} joined the room!`,
+        sender: p.name,
+        avatar: p.avatar,
+        text: String(msg.text).slice(0, 100),
         time: Date.now(),
-        isSystem: true,
+        seat,
       });
-
-      this.broadcastLobby();
-      conn.send({ type: 'voice', states: this.voiceStates } as ServerMessage);
-
-      if (this.lobby.inGame && this.host) {
-        // Reconnected during game! Reassign seat in game host
-        this.host.setSeatKind(assignedSeat, 'remote', 'Reconnected');
-        conn.send({
-          type: 'view',
-          view: toView(this.host.state, assignedSeat),
-        } as ServerMessage);
-      }
-    } else if (msg.type === 'action') {
-      const seat = this.getSeatForConnection(conn);
-      if (seat !== -1 && this.host) {
-        this.host.dispatch({ ...msg.intent, player: seat } as Action);
-      }
-    } else if (msg.type === 'taunt') {
-      const seat = this.getSeatForConnection(conn);
-      if (seat !== -1) this.taunt(seat, msg.id);
-    } else if (msg.type === 'voice') {
-      if (this.getSeatForConnection(conn) !== -1) this.setVoice(conn.peer, { mic: !!msg.mic, speaking: !!msg.speaking });
-    } else if (msg.type === 'chat') {
-      const seat = this.getSeatForConnection(conn);
-      if (seat !== -1) {
-        const p = this.lobby.seats[seat];
-        this.broadcastChat({
-          id: newId(),
-          sender: p.name,
-          avatar: p.avatar,
-          text: String(msg.text).slice(0, 100),
-          time: Date.now(),
-          seat,
-        });
-      }
     }
   }
 
   private handleClientDisconnect(conn: DataConnection) {
-    const seat = this.getSeatForConnection(conn);
-    if (seat !== -1) {
-      this.connections.delete(seat);
-      const prevName = this.lobby.seats[seat].name;
-      // Convert seat to Bot so game doesn't stall
-      const bot = pickPersonas(this.lobby.theme, 1, this.lobby.seats.map((x) => x.avatar))[0];
-      this.lobby.seats[seat] = {
-        name: `${bot.name} (sub)`,
-        avatar: bot.avatar,
-        kind: 'bot',
-      };
-
-      this.broadcastChat({
-        id: newId(),
-        sender: 'NUNO',
-        avatar: '🤖',
-        text: `${prevName} disconnected — ${bot.name} took over their seat.`,
-        time: Date.now(),
-        isSystem: true,
-      });
-
-      if (this.host) {
-        this.host.setSeatKind(seat, 'bot', 'Replaced disconnected player');
-      }
-      if (this.voiceStates[conn.peer]) {
-        const { [conn.peer]: _gone, ...rest } = this.voiceStates;
-        this.voiceStates = rest;
-        this.broadcastVoice();
-      }
-      this.broadcastLobby();
+    const seat = this.seatOf(conn);
+    // Only the connection currently in a seat counts (a replaced one closing doesn't).
+    if (seat === -1) return;
+    this.connections.delete(seat);
+    this.connOwner.delete(conn);
+    const prev = this.lobby.seats[seat];
+    if (this.voiceStates[conn.peer]) {
+      const { [conn.peer]: _gone, ...rest } = this.voiceStates;
+      this.voiceStates = rest;
+      this.broadcastVoice();
     }
+
+    if (!this.lobby.inGame) {
+      // In the lobby, hold the seat: phones drop out whenever someone switches apps.
+      this.lobby.seats[seat] = { ...prev, away: true };
+      this.broadcastChat({ id: newId(), sender: 'NUNO', avatar: '📶', text: `${prev.name} lost connection — keeping their seat.`, time: Date.now(), isSystem: true });
+      clearTimeout(this.holdTimers.get(seat));
+      this.holdTimers.set(
+        seat,
+        setTimeout(() => {
+          this.holdTimers.delete(seat);
+          const now = this.lobby.seats[seat];
+          if (this.destroyed || this.lobby.inGame || !now?.away || this.connections.has(seat)) return;
+          this.benchSeat(seat, `${now.name} didn’t come back — a bot took their seat.`);
+        }, LOBBY_HOLD_MS),
+      );
+      this.broadcastLobby();
+      return;
+    }
+
+    // In a game the table can't wait: a bot plays for them until they're back.
+    this.benchSeat(seat, `${prev.name} dropped out — a bot plays for them until they’re back.`);
+    this.host?.setSeatKind(seat, 'bot', 'Replaced disconnected player');
   }
 
-  private getSeatForConnection(conn: DataConnection): number {
-    for (const [seat, c] of this.connections.entries()) {
-      if (c === conn || c.peer === conn.peer) return seat;
-    }
-    return -1;
+  /** Hands a seat to a bot (its owner can still come back to it). */
+  private benchSeat(seat: number, note: string) {
+    const bot = pickPersonas(this.lobby.theme, 1, this.lobby.seats.map((x) => x.avatar))[0];
+    this.lobby.seats[seat] = { name: `${bot.name} (sub)`, avatar: bot.avatar, kind: 'bot' };
+    this.broadcastChat({ id: newId(), sender: 'NUNO', avatar: '🤖', text: note, time: Date.now(), isSystem: true });
+    this.broadcastLobby();
   }
 
   private broadcastLobby() {
@@ -456,17 +552,25 @@ export class HostSession implements Session {
 
   /**
    * Shuffles the table for a new game: friends spread out with bots between
-   * them, in a random order. Connections follow their players to the new seats.
+   * them, in a random order. Connections (and seat claims) follow their players.
    */
   private reseat() {
-    const order = mixSeats(this.lobby.seats.map((s) => s.kind !== 'bot'));
-    const connections = new Map<number, DataConnection>();
-    order.forEach((old, seat) => {
-      const conn = this.connections.get(old);
-      if (conn) connections.set(seat, conn);
+    // Anyone still away when the game starts is covered by a bot until they're back.
+    this.lobby.seats.forEach((s, i) => {
+      if (s.kind === 'remote' && !this.connections.has(i)) {
+        clearTimeout(this.holdTimers.get(i));
+        this.holdTimers.delete(i);
+        const bot = pickPersonas(this.lobby.theme, 1, this.lobby.seats.map((x) => x.avatar))[0];
+        this.lobby.seats[i] = { name: `${bot.name} (sub)`, avatar: bot.avatar, kind: 'bot' };
+      }
     });
+    const order = mixSeats(this.lobby.seats.map((s) => s.kind !== 'bot'));
+    const moved = (old: number) => order.indexOf(old);
+    const connections = new Map<number, DataConnection>();
+    for (const [old, conn] of this.connections) connections.set(moved(old), conn);
+    for (const [id, old] of this.owners) this.owners.set(id, moved(old));
     this.lobby.seats = order.map((old) => this.lobby.seats[old]);
-    this.lobby.hostSeat = order.indexOf(this.lobby.hostSeat);
+    this.lobby.hostSeat = moved(this.lobby.hostSeat);
     this.connections = connections;
     this.lastTaunt.clear();
   }
@@ -516,10 +620,11 @@ export class HostSession implements Session {
         avatar: persona.avatar,
         kind: 'bot',
       };
-      if (this.connections.has(index)) {
-        this.connections.get(index)?.close();
-        this.connections.delete(index);
-      }
+      // Removed by the host: no seat to come back to.
+      this.release(index);
+      const conn = this.connections.get(index);
+      this.connections.delete(index);
+      conn?.close();
     }
     this.broadcastLobby();
   }
@@ -537,12 +642,15 @@ export class HostSession implements Session {
       while (this.lobby.seats.length > target) {
         const lastIndex = this.lobby.seats.length - 1;
         if (lastIndex === this.lobby.hostSeat) break;
-        this.connections.get(lastIndex)?.close();
+        this.release(lastIndex);
+        const conn = this.connections.get(lastIndex);
         this.connections.delete(lastIndex);
+        conn?.close();
         this.lobby.seats.pop();
       }
       this.lobby.options.playerCount = this.lobby.seats.length;
     }
+    rememberRoom({ roomId: this.roomId, options: this.lobby.options });
     this.broadcastLobby();
   }
 
@@ -578,6 +686,9 @@ export class HostSession implements Session {
 
   destroy() {
     this.destroyed = true;
+    rememberRoom(null);
+    this.stopSignal?.();
+    this.holdTimers.forEach(clearTimeout);
     this.unsubSettings();
     this.talker.stop();
     this.voice.destroy();
@@ -591,12 +702,25 @@ export class HostSession implements Session {
 // ─────────────────────────────────────────────────────────────
 // 3. CLIENT SESSION (Joins a remote Host)
 // ─────────────────────────────────────────────────────────────
+
+/** How long to keep trying to reach the host before giving up. Their phone may just be in the background. */
+const GIVE_UP_MS = 150 * 1000;
+/** A connection that hasn't opened by now isn't going to. */
+const CONNECT_TIMEOUT_MS = 12 * 1000;
+
 export class ClientSession implements Session {
   readonly isHost = false;
   mySeat = -1;
   private peer: Peer | null = null;
   private conn: DataConnection | null = null;
   private destroyed = false;
+  /** Got into the room at least once. */
+  private joined = false;
+  /** When the current spell of not reaching the host began. */
+  private troubleSince = 0;
+  private retryTimer?: ReturnType<typeof setTimeout>;
+  private stopSignal?: () => void;
+  private readonly clientId = clientToken();
   readonly voice = new VoiceChat((state) => this.conn?.open && this.conn.send({ type: 'voice', ...state } as ClientMessage));
 
   constructor(
@@ -608,58 +732,52 @@ export class ClientSession implements Session {
     this.initPeer();
   }
 
-  private async initPeer() {
+  private get hostId() {
+    return `nuno-${this.roomId.toLowerCase()}-host`;
+  }
+
+  private async initPeer(attempt = 0) {
     try {
       const [{ Peer }, iceServers] = await Promise.all([import('peerjs'), getIceServers()]);
       // The player may have left while PeerJS was loading.
       if (this.destroyed) return;
-      this.peer = new Peer({
+      const peer = new Peer({
         debug: 1,
         config: { iceServers },
       });
+      this.peer = peer;
+      let opened = false;
 
-      this.peer.on('open', () => {
-        const hostPeerId = `nuno-${this.roomId.toLowerCase()}-host`;
-        this.voice.attach(this.peer!);
-        this.conn = this.peer!.connect(hostPeerId, { reliable: true });
-
-        this.conn.on('open', () => {
-          this.events.onConnected?.();
-          this.conn!.send({
-            type: 'join',
-            name: this.playerName,
-            avatar: this.playerAvatar,
-          } as ClientMessage);
-        });
-
-        this.conn.on('data', (raw) => {
-          const msg = raw as ServerMessage;
-          this.handleServerMessage(msg);
-        });
-
-        this.conn.on('close', () => {
-          if (this.destroyed) return;
-          this.events.onDisconnected?.();
-          this.events.onError('Disconnected from host.');
-        });
-
-        this.conn.on('error', (err) => {
-          if (this.destroyed) return;
-          console.warn('Connection error:', err);
-          this.events.onError(err.message || 'Connection lost');
-        });
+      peer.on('open', () => {
+        if (this.peer !== peer || this.destroyed) return;
+        if (!opened) {
+          opened = true;
+          this.voice.attach(peer);
+          this.stopSignal = keepSignalling(peer, () => {});
+        }
+        // (Re)connected to the server: reach the host if we aren't talking to them.
+        if (!this.conn) this.connectToHost();
       });
 
-      this.peer.on('error', (err) => {
-        if (this.destroyed) return;
+      peer.on('error', (err) => {
+        if (this.destroyed || this.peer !== peer) return;
         console.warn('Client peer error:', err);
         if (err.type === 'peer-unavailable') {
-          // Once we're in, this is a voice link to someone who just left.
-          if (this.conn?.open) return;
-          this.events.onError(`Room "${this.roomId}" not found. Check the room code or ask the host.`);
-        } else {
-          this.events.onError(err.message || 'Could not connect to multiplayer server');
+          // The host isn't on the server right now (their game may be in the background): try again shortly.
+          if (err.message?.includes(this.hostId) && this.conn && !this.conn.open) {
+            const c = this.conn;
+            this.conn = null;
+            c.close();
+            this.retry();
+          }
+          return; // otherwise a voice link to someone who just left
         }
+        if (opened && isTransientSignalError(err.type)) return;
+        if (!opened && attempt < 4 && ['network', 'socket-error', 'socket-closed', 'server-error'].includes(err.type)) {
+          setTimeout(() => this.initPeer(attempt + 1), 2000 * (attempt + 1));
+          return;
+        }
+        this.events.onError(err.message || 'Could not connect to multiplayer server');
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Multiplayer init error';
@@ -667,9 +785,68 @@ export class ClientSession implements Session {
     }
   }
 
+  private connectToHost() {
+    clearTimeout(this.retryTimer);
+    const peer = this.peer;
+    if (this.destroyed || !peer || peer.destroyed || peer.disconnected) return;
+    const conn = peer.connect(this.hostId, { reliable: true });
+    this.conn = conn;
+    let opened = false;
+
+    conn.on('open', () => {
+      if (this.conn !== conn || this.destroyed) return;
+      opened = true;
+      this.troubleSince = 0;
+      this.events.onStatus?.(null);
+      this.events.onConnected?.();
+      conn.send({ type: 'join', name: this.playerName, avatar: this.playerAvatar, clientId: this.clientId } as ClientMessage);
+    });
+
+    conn.on('data', (raw) => {
+      if (this.conn === conn) this.handleServerMessage(raw as ServerMessage);
+    });
+
+    const lost = () => {
+      if (this.conn !== conn || this.destroyed) return;
+      this.conn = null;
+      this.retry();
+    };
+    conn.on('close', lost);
+    conn.on('error', (err) => {
+      console.warn('Connection error:', err);
+      lost();
+    });
+    setTimeout(() => {
+      if (this.conn === conn && !opened) {
+        this.conn = null;
+        conn.close();
+        this.retry();
+      }
+    }, CONNECT_TIMEOUT_MS);
+  }
+
+  /** Lost the host, or haven't reached them yet: keep trying for a while before giving up. */
+  private retry() {
+    clearTimeout(this.retryTimer);
+    if (this.destroyed) return;
+    const now = Date.now();
+    if (!this.troubleSince) this.troubleSince = now;
+    if (now - this.troubleSince > GIVE_UP_MS) {
+      this.events.onStatus?.(null);
+      this.events.onDisconnected?.();
+      this.events.onError(this.joined ? 'Lost the connection to the host.' : `Room "${this.roomId}" not found. Check the room code or ask the host.`);
+      return;
+    }
+    this.events.onStatus?.(this.joined ? 'reconnecting' : 'waiting');
+    // Quick at first, then every few seconds.
+    const delay = Math.min(5000, 800 + (now - this.troubleSince) / 15);
+    this.retryTimer = setTimeout(() => this.connectToHost(), delay);
+  }
+
   private handleServerMessage(msg: ServerMessage) {
     switch (msg.type) {
       case 'lobby':
+        this.joined = true;
         this.mySeat = msg.yourSeat;
         // The host picks the theme for everyone in the room.
         setRoomTheme(msg.state.theme ?? null);
@@ -705,6 +882,8 @@ export class ClientSession implements Session {
 
   destroy() {
     this.destroyed = true;
+    clearTimeout(this.retryTimer);
+    this.stopSignal?.();
     this.voice.destroy();
     setRoomTheme(null);
     this.conn?.close();

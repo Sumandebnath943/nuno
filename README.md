@@ -69,6 +69,15 @@ NUNO gets relay credentials from Cloudflare Realtime TURN (free for the first 1,
 
 Until those are set, the game simply uses STUN as before. If you'd rather use another provider's fixed credentials, set `VITE_TURN_URLS` (comma-separated `turn:` URLs), `VITE_TURN_USERNAME` and `VITE_TURN_CREDENTIAL` instead; note those end up inside the app's JavaScript where anyone can read them.
 
+## 📶 Switching apps and dropping out
+
+Phones cut a page's connections as soon as you switch apps — sharing the invite in WhatsApp is enough. NUNO copes with that:
+
+- **The host** reconnects to the room directory by itself, with the same room code, as soon as they're back. If the phone reloaded the page meanwhile, the room reopens under the same code.
+- **Friends opening the link while the host is away** wait for them ("Waiting for the host…") for a couple of minutes instead of getting "room not found".
+- **A friend who drops out** keeps their seat: in the lobby it's held for two minutes, and mid-game a bot plays for them until they're back, then they take their own seat again (and their own hand).
+- The screen stays on during online games, and **Invite** opens the phone's share sheet.
+
 ## 🪑 Seating
 
 When an online game starts, the table is shuffled: friends are spread out with bots between them, so humans don't all sit in a row and bots don't all play one after another. Every new game reshuffles.

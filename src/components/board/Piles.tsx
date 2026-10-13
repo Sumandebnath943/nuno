@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { Card, Color, Face, Side } from '../../game/types';
 import { CARD_RATIO, CardView } from '../CardView';
-import { INK, readableOn } from '../../lib/theme';
+import { contrast, INK, readableOn } from '../../lib/theme';
 import { useTheme } from '../../themes';
 import { pileJitter } from './layout';
 
@@ -21,10 +21,12 @@ interface DeckProps {
   launcher?: boolean;
   /** Bumps every time the launcher fires, to replay its shake. */
   shots?: number;
+  /** Bumps when the dealer shuffles, to play a riffle. */
+  riffles?: number;
 }
 
 export const Deck = forwardRef<HTMLDivElement, DeckProps>(function Deck(
-  { width, count, canDraw, onDraw, label = true, drawLabel, topAlt, side = 'light', launcher = false, shots = 0 },
+  { width, count, canDraw, onDraw, label = true, drawLabel, topAlt, side = 'light', launcher = false, shots = 0, riffles = 0 },
   ref,
 ) {
   const h = width * CARD_RATIO;
@@ -57,10 +59,22 @@ export const Deck = forwardRef<HTMLDivElement, DeckProps>(function Deck(
                 {topAlt ? <CardView card={topAlt} side={backSide} width={width} /> : <CardView faceDown width={width} />}
               </div>
             ))}
+            {/* The riffle: the deck splits in two, the halves fly apart and snap back together, twice. */}
+            {riffles > 0 && count > 0 && (
+              <div key={riffles} className="pointer-events-none absolute inset-0" aria-hidden="true">
+                <div className="riffle riffle-l absolute left-0 top-0">
+                  <CardView faceDown width={width} />
+                </div>
+                <div className="riffle riffle-r absolute left-0 top-0">
+                  <CardView faceDown width={width} />
+                </div>
+              </div>
+            )}
             <div
               ref={ref}
               data-card-w={width}
-              className="absolute left-0 top-0 transition-transform group-hover:-translate-y-1"
+              key={`top-${riffles}`}
+              className={`absolute left-0 top-0 transition-transform group-hover:-translate-y-1 ${riffles > 0 ? 'riffle-top' : ''}`}
               style={{ width, height: h }}
             >
               {count > 0 &&
@@ -179,7 +193,8 @@ export const Discard = forwardRef<HTMLDivElement, DiscardProps>(function Discard
   const visible = cards.filter((c) => !hidden.has(c.id));
   const compact = width < 80;
   const alias = color ? theme.colorAlias?.[color] : undefined;
-  const labelBg = color ? pal[color].base : '#6a55d9';
+  // The colour's deeper shade: small print reads on it whatever the colour.
+  const labelBg = color ? (contrast('#ffffff', pal[color].base) >= 4.5 || contrast(INK, pal[color].base) >= 4.5 ? pal[color].base : pal[color].dark) : '#5a46c9';
   const labelInk = readableOn(labelBg);
   return (
     <div className="relative flex flex-col items-center" style={{ width }}>

@@ -43,3 +43,34 @@ export function useSafeArea(): { top: number; bottom: number } {
   }, []);
   return insets;
 }
+
+/**
+ * Keeps the screen awake while `active` (online play). A phone that dims and
+ * locks while you wait for your turn drops out of the room. Browsers release
+ * the lock whenever the page is hidden, so it's taken again on return.
+ */
+export function useWakeLock(active: boolean) {
+  useEffect(() => {
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    if (!active || !nav.wakeLock) return;
+    let lock: { release: () => Promise<void> } | null = null;
+    let stopped = false;
+    const take = () => {
+      if (stopped || document.hidden) return;
+      nav.wakeLock!.request('screen').then(
+        (l) => {
+          if (stopped) void l.release().catch(() => {});
+          else lock = l;
+        },
+        () => {}, // not allowed (battery saver, no permission): carry on without it
+      );
+    };
+    take();
+    document.addEventListener('visibilitychange', take);
+    return () => {
+      stopped = true;
+      document.removeEventListener('visibilitychange', take);
+      void lock?.release().catch(() => {});
+    };
+  }, [active]);
+}

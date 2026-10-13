@@ -38,8 +38,8 @@ export const ChallengeResultModal: React.FC<Props> = ({ open, result, me, player
     <Modal open={open} onClose={close} className="max-w-md">
       <div className="p-5 text-center sm:p-6">
         <div
-          className={`font-display mx-auto w-fit -rotate-6 rounded-2xl border-4 px-5 py-1 text-3xl uppercase animate-popIn sm:text-4xl ${
-            won ? 'border-[#22a447] text-[#22a447]' : 'border-[#d91f27] text-[#d91f27]'
+          className={`font-display mx-auto w-fit -rotate-6 rounded-2xl border-4 px-5 py-1 text-3xl uppercase animate-stamp sm:text-4xl ${
+            won ? 'border-[#16803a] text-[#16803a]' : 'border-[#c4161e] text-[#c4161e]'
           }`}
         >
           {headline}
@@ -50,8 +50,10 @@ export const ChallengeResultModal: React.FC<Props> = ({ open, result, me, player
           <div className="mt-4 rounded-2xl border-[2.5px] border-[var(--ink)] bg-[var(--surface)] p-3">
             <div className="label mb-2">{offender.name}'s hand</div>
             <div className="nice-scroll flex max-h-40 flex-wrap justify-center gap-1.5 overflow-y-auto">
-              {result.revealedHand.map((c) => (
-                <CardView key={c.id} card={c} size="xs" />
+              {result.revealedHand.map((c, i) => (
+                <div key={c.id} className="animate-rowIn" style={{ animationDelay: `${0.35 + i * 0.05}s` }}>
+                  <CardView card={c} size="xs" />
+                </div>
               ))}
             </div>
           </div>

@@ -25,7 +25,7 @@ const READY_AT = 1650;
  * lets the browser play sound, so the stinger and music start with it; on
  * Android it also goes full screen.
  */
-export function Intro({ joining, onDone }: { joining?: string | null; onDone: () => void }) {
+export function Intro({ joining, reopening, onDone }: { joining?: string | null; reopening?: string | null; onDone: () => void }) {
   const theme = useTheme();
   const art = artFor(theme.id);
   const [ready, setReady] = useState(false);
@@ -182,7 +182,7 @@ export function Intro({ joining, onDone }: { joining?: string | null; onDone: ()
           <div className={`intro-cta relative mt-[5dvh] flex flex-col items-center ${ready ? 'is-ready' : ''}`}>
             <span className="btn btn-yellow animate-buzz flex h-16 items-center px-9 text-[clamp(22px,6vw,30px)]">{joining ? 'TAP TO JOIN!' : 'TAP TO PLAY!'}</span>
             <span className="font-ui mt-3 rounded-full bg-black/45 px-3 py-0.5 text-sm text-white">
-              {joining ? `Room ${joining} is waiting` : '🔊 Sound on for the full show'}
+              {joining ? `Room ${joining} is waiting` : reopening ? `Your room ${reopening} is still open` : '🔊 Sound on for the full show'}
             </span>
           </div>
         </div>

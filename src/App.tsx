@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
 import type { GameView, Intent, Difficulty, GameMode } from './game/types';
 import type { ChatMessage, LobbyState, RoomOptions } from './net/protocol';
-import { ClientSession, HostSession, LocalSession, type Session } from './net/network';
+import { ClientSession, HostSession, LocalSession, rememberedRoom, type ConnStatus, type Session } from './net/network';
 import { HomeMenu } from './components/HomeMenu';
 import { LobbyView } from './components/LobbyView';
 import { GameBoard } from './components/GameBoard';
@@ -14,6 +14,7 @@ import { Intro } from './components/Intro';
 import { THEMES, ThemeContext } from './themes';
 import { useSettings } from './lib/settings';
 import { prefetchIceServers } from './net/ice';
+import { useWakeLock } from './lib/device';
 
 /** Long games collect a lot of trash talk; the table only needs the recent part. */
 const keepRecent = (list: ChatMessage[], msg: ChatMessage) => [...list.slice(-80), msg];
@@ -60,14 +61,22 @@ export const App: React.FC = () => {
   // The opening plays every time the game is opened.
   const [intro, setIntro] = useState(true);
   const [inviteCode] = useState(() => new URLSearchParams(window.location.search).get('room'));
+  // A room this tab was hosting before the page reloaded (phones reload tabs left in the background).
+  const [reopen] = useState(() => (inviteCode ? null : rememberedRoom()));
+  const [connStatus, setConnStatus] = useState<ConnStatus | null>(null);
 
-  // An invite link joins the room straight away (it connects while the intro plays).
+  // An invite link joins the room straight away (it connects while the intro plays),
+  // and a host whose page reloaded gets their room back under the same code.
   useEffect(() => {
     // Relay credentials for online play, fetched ahead so rooms open without waiting.
     prefetchIceServers();
     if (inviteCode) handleJoinRoom(inviteCode);
+    else if (reopen) openRoom(reopen.roomId, reopen.options, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the screen on while playing online: a sleeping phone drops out of the room.
+  useWakeLock(screen === 'game' || (screen === 'lobby' && !!session));
 
   const handleUpdateProfile = (name: string, avatar: string) => {
     const next = { name, avatar };
@@ -84,6 +93,7 @@ export const App: React.FC = () => {
     setView(null);
     setLobby(null);
     setChatMessages([]);
+    setConnStatus(null);
   };
 
   const openRules = (mode: GameMode, focus: 'rules' | 'cards' = 'rules') => setRules({ open: true, mode, focus });
@@ -103,22 +113,32 @@ export const App: React.FC = () => {
   };
 
   const handleCreateRoom = (playerCount: number, difficulty: Difficulty, targetScore: number, mode: GameMode) => {
-    cleanupSession();
-    const roomId = generateRoomId();
-    const options: RoomOptions = { playerCount, difficulty, targetScore, mode };
+    openRoom(generateRoomId(), { playerCount, difficulty, targetScore, mode });
+  };
 
-    const sess = new HostSession(roomId, profile.name, profile.avatar, options, {
-      onView: (v) => {
-        setView(v);
-        setScreen('game');
+  /** Hosts a room. `reopening`: the page reloaded, so take the same room code back. */
+  const openRoom = (roomId: string, options: RoomOptions, reopening = false) => {
+    cleanupSession();
+    const sess = new HostSession(
+      roomId,
+      profile.name,
+      profile.avatar,
+      options,
+      {
+        onView: (v) => {
+          setView(v);
+          setScreen('game');
+        },
+        onLobby: (l, seat) => {
+          setLobby(l);
+          setYourSeat(seat);
+        },
+        onChat: (msg) => setChatMessages((prev) => keepRecent(prev, msg)),
+        onError: (err) => setErrorMessage(err),
+        onStatus: setConnStatus,
       },
-      onLobby: (l, seat) => {
-        setLobby(l);
-        setYourSeat(seat);
-      },
-      onChat: (msg) => setChatMessages((prev) => keepRecent(prev, msg)),
-      onError: (err) => setErrorMessage(err),
-    });
+      reopening,
+    );
 
     sessionRef.current = sess;
     setSession(sess);
@@ -128,6 +148,8 @@ export const App: React.FC = () => {
   const handleJoinRoom = (roomId: string) => {
     cleanupSession();
     const cleanId = roomId.trim().toUpperCase();
+    // Keep the code in the address, so a reloaded page rejoins (and gets the same seat back).
+    window.history.replaceState({}, '', `${window.location.pathname}?room=${cleanId}`);
 
     const sess = new ClientSession(cleanId, profile.name, profile.avatar, {
       onView: (v) => {
@@ -141,6 +163,7 @@ export const App: React.FC = () => {
       },
       onChat: (msg) => setChatMessages((prev) => keepRecent(prev, msg)),
       onError: (err) => setErrorMessage(err),
+      onStatus: setConnStatus,
     });
 
     sessionRef.current = sess;
@@ -198,6 +221,9 @@ export const App: React.FC = () => {
           </div>
         )}
 
+        {/* Connection trouble that sorts itself out (the game was in the background, a signal drop). */}
+        {connStatus && !(screen === 'lobby' && !lobby) && <ConnectionPill status={connStatus} host={!!session?.isHost} />}
+
         {/* Screen Router */}
         {screen === 'home' && (
           <HomeMenu
@@ -215,9 +241,16 @@ export const App: React.FC = () => {
         {screen === 'lobby' && !lobby && (
           <div className="relative flex h-[100dvh] flex-col items-center justify-center gap-6 p-6 text-center">
             <Logo className="w-64" />
-            <div className="panel flex items-center gap-3 px-6 py-4">
+            <div className="panel flex max-w-[min(92vw,380px)] items-center gap-3 px-5 py-4 text-left">
               <span className="text-3xl animate-wiggle">🎲</span>
-              <span className="font-display text-xl">Finding the room…</span>
+              <span>
+                <span className="font-display block text-xl">{connStatus === 'waiting' ? 'Waiting for the host…' : 'Finding the room…'}</span>
+                {connStatus === 'waiting' && (
+                  <span className="font-body block text-sm font-semibold text-[var(--muted)]">
+                    Their game may be in the background. You’ll get in as soon as they’re back.
+                  </span>
+                )}
+              </span>
             </div>
             <button onClick={handleLeave} className="icon-btn">
               ← Back to menu
@@ -272,8 +305,30 @@ export const App: React.FC = () => {
           onClose={() => setSettingsTab(null)}
           onOpenRules={() => openRules(view?.mode ?? 'classic')}
         />
-        {intro && <Intro joining={inviteCode} onDone={() => setIntro(false)} />}
+        {intro && <Intro joining={inviteCode} reopening={reopen?.roomId} onDone={() => setIntro(false)} />}
       </div>
     </ThemeContext.Provider>
   );
 };
+
+const STATUS_TEXT: Record<ConnStatus, [string, string]> = {
+  reconnecting: ['📡', 'Reconnecting…'],
+  waiting: ['⏳', 'Waiting for the host…'],
+  reopening: ['📡', 'Reopening your room…'],
+};
+
+/** A small note at the top while a dropped connection comes back. */
+function ConnectionPill({ status, host }: { status: ConnStatus; host: boolean }) {
+  const [icon, text] = STATUS_TEXT[status];
+  return (
+    <div
+      role="status"
+      className="font-ui pointer-events-none fixed left-1/2 top-[max(8px,env(safe-area-inset-top))] z-[85] flex max-w-[92vw] -translate-x-1/2 items-center gap-2 rounded-full border-[2.5px] border-[var(--ink)] bg-[var(--highlight)] px-3 py-1 text-sm text-[var(--ink)] shadow-[0_3px_0_var(--ink)] animate-popIn"
+    >
+      <span className="animate-pulse">{icon}</span>
+      <span className="truncate">
+        {status === 'reconnecting' && host ? 'Reconnecting your room… friends can join again in a moment' : text}
+      </span>
+    </div>
+  );
+}

@@ -59,11 +59,11 @@ export const ColorPickerModal: React.FC<Props> = ({
         <h2 className="font-display text-2xl sm:text-3xl">{title}</h2>
         <p className="mt-1 text-sm font-medium text-[var(--muted)]">{subtitle}</p>
 
-        <svg viewBox="-112 -112 224 224" className="mx-auto mt-4 w-60 overflow-visible sm:w-64" role="group" aria-label="Colours">
+        <svg viewBox="-112 -112 224 224" className="animate-wheelIn mx-auto mt-4 w-60 overflow-visible sm:w-64" role="group" aria-label="Colours">
           <circle r={R + 8} fill={INK} transform="translate(0 7)" />
-          {WEDGES.map((w) => (
+          {WEDGES.map((w, i) => (
+            <g key={w.color} className="wedge-in" style={{ animationDelay: `${0.12 + i * 0.06}s` }}>
             <g
-              key={w.color}
               role="button"
               tabIndex={0}
               aria-label={`${w.color}${alias?.[w.color] ? ` (${alias[w.color]})` : ''}, you hold ${counts.get(w.color)!}`}
@@ -79,6 +79,7 @@ export const ColorPickerModal: React.FC<Props> = ({
             >
               <path d={w.d} fill={pal[w.color].base} stroke={INK} strokeWidth="4" strokeLinejoin="round" />
               <path d={w.d} fill="url(#n-sheen)" />
+              {counts.get(w.color)! === best && best > 0 && <path d={w.d} fill="#fff" className="most-glow pointer-events-none" style={{ mixBlendMode: 'soft-light' }} />}
               <text
                 x={w.lx}
                 y={w.ly}
@@ -107,6 +108,7 @@ export const ColorPickerModal: React.FC<Props> = ({
                   MOST
                 </text>
               )}
+            </g>
             </g>
           ))}
           <circle r="20" fill="#fff" stroke={INK} strokeWidth="4" />

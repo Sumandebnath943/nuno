@@ -47,6 +47,20 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
     if (picked && !cards.some((c) => c.id === picked)) setPicked(null);
   }, [cards, picked]);
 
+  // When your turn starts, the playable cards rise in a quick wave, left to right.
+  // (Set during render, so the stagger is there in the same frame the cards start to move.)
+  const [turnSeen, setTurnSeen] = useState(myTurn);
+  const [wave, setWave] = useState(false);
+  if (myTurn !== turnSeen) {
+    setTurnSeen(myTurn);
+    setWave(myTurn);
+  }
+  useEffect(() => {
+    if (!wave) return;
+    const t = setTimeout(() => setWave(false), 700);
+    return () => clearTimeout(t);
+  }, [wave]);
+
   // Big hands fan flatter so the edge cards don't tip into the controls.
   const rotStep = Math.min(3.4, 26 / Math.max(n, 1));
   const spill = ch * Math.sin((mid * rotStep * Math.PI) / 180);
@@ -94,6 +108,7 @@ export const Hand = forwardRef<HTMLDivElement, Props>(function Hand(
         rot={isPicked ? 0 : rot}
         layoutRot={rot}
         z={isPicked ? 300 : i + 1}
+        delay={wave ? Math.min(i, 14) * 30 : 0}
         picked={isPicked}
         playable={isPlayable}
         hidden={hidden.has(card.id)}
@@ -139,6 +154,8 @@ interface CardProps {
   /** The tilt the card has in the fan (flights land at it). */
   layoutRot: number;
   z: number;
+  /** Staggers the move (ms), for the wave at the start of your turn. */
+  delay: number;
   picked: boolean;
   playable: boolean;
   hidden: boolean;
@@ -153,7 +170,7 @@ interface CardProps {
 }
 
 const HandCard = memo(
-  function HandCard({ card, x, y, rot, layoutRot, z, picked, playable, hidden, dim, myTurn, touch, cw, side, help, registerCard, onTap }: CardProps) {
+  function HandCard({ card, x, y, rot, layoutRot, z, delay, picked, playable, hidden, dim, myTurn, touch, cw, side, help, registerCard, onTap }: CardProps) {
     return (
       <div
         className="hand-slot absolute bottom-0 left-0"
@@ -161,6 +178,7 @@ const HandCard = memo(
           zIndex: z,
           transformOrigin: '50% 100%',
           transform: `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${rot.toFixed(2)}deg) scale(${picked ? 1.12 : 1})`,
+          transitionDelay: delay ? `${delay}ms` : undefined,
         }}
       >
         {picked && (
@@ -213,6 +231,7 @@ const HandCard = memo(
     a.rot === b.rot &&
     a.layoutRot === b.layoutRot &&
     a.z === b.z &&
+    a.delay === b.delay &&
     a.picked === b.picked &&
     a.playable === b.playable &&
     a.hidden === b.hidden &&

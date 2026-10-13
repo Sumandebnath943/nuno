@@ -115,11 +115,11 @@ export const HomeMenu: React.FC<Props> = ({
       title="Pick a theme"
     >
       {art.backdrop && <img src={art.backdrop.soft ?? art.backdrop.url} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90" draggable={false} />}
-      <span className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-black/10" aria-hidden="true" />
+      <span className="absolute inset-0 bg-gradient-to-r from-black/75 via-black/50 to-black/30" aria-hidden="true" />
       <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] text-lg">
         {characters[0] ? <img src={characters[0].face} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} /> : theme.emoji}
       </span>
-      <span className="relative min-w-0 flex-1 truncate leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.7)' }}>
+      <span className="relative min-w-0 flex-1 truncate leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.75), 1px 0 0 rgba(0,0,0,0.6), -1px 0 0 rgba(0,0,0,0.6)' }}>
         <span className="font-display text-base">{theme.title}</span>
         <span className="font-body ml-1.5 text-[10.5px] font-bold uppercase tracking-wider">{theme.id === 'classic' ? 'try an anime theme!' : 'theme'}</span>
       </span>
@@ -149,11 +149,11 @@ export const HomeMenu: React.FC<Props> = ({
         style={{ background: theme.vars['--room-bg'] ?? 'linear-gradient(90deg, #3b2f86, #17143d)' }}
       >
         {art.backdrop && <img src={art.backdrop.soft ?? art.backdrop.url} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
-        <span className="absolute inset-0 bg-gradient-to-r from-black/60 to-black/15" aria-hidden="true" />
+        <span className="absolute inset-0 bg-gradient-to-r from-black/75 to-black/35" aria-hidden="true" />
         <span className="relative flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[var(--surface)] text-lg">
           {characters[0] ? <img src={characters[0].face} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} /> : theme.emoji}
         </span>
-        <span className="relative min-w-0 leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.75)' }}>
+        <span className="relative min-w-0 leading-tight text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.75), 1px 0 0 rgba(0,0,0,0.6), -1px 0 0 rgba(0,0,0,0.6)' }}>
           <span className="font-ui block truncate text-[15px]">{theme.title}</span>
           <span className="font-body block text-[11px] font-bold uppercase tracking-wide">🎨 Themes</span>
         </span>
@@ -543,7 +543,7 @@ function FormatPicker({ format, official, onChange }: { format: Format; official
             className={`chip flex h-11 flex-col items-center justify-center leading-none sm:h-12 short:h-9 land:h-8 ${format === f.id ? 'is-on' : ''}`}
           >
             <span className="text-[15px]">{f.label}</span>
-            <span className="mt-1 font-body text-[11px] font-semibold opacity-80 short:hidden">{f.hint}</span>
+            <span className="mt-1 font-body text-[11px] font-semibold short:hidden">{f.hint}</span>
           </button>
         ))}
       </div>

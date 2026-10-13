@@ -259,7 +259,7 @@ function ThemeCard({ theme, focused, selected, disabled, onPick }: { theme: Them
       style={{ width: 'min(82vw, 300px)', height: 'clamp(340px, calc(100dvh - 330px), 470px)', background: theme.vars['--room-bg'] ?? 'linear-gradient(180deg, #241d63, #100d2b)' }}
     >
       {art.backdrop && <img src={art.backdrop.url} alt="" className="absolute inset-0 h-full w-full object-cover" draggable={false} />}
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 34%, rgba(0,0,0,0) 58%, rgba(0,0,0,0.7) 100%)' }} />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0) 48%, rgba(0,0,0,0.88) 100%)' }} />
       {art.hero && (
         <div className="absolute inset-x-0 bottom-[54px] top-[86px] flex items-end justify-center">
           <img
@@ -288,10 +288,10 @@ function ThemeCard({ theme, focused, selected, disabled, onPick }: { theme: Them
         <div className="flex items-start gap-2">
           <span className="text-2xl leading-none drop-shadow">{theme.emoji}</span>
           <div className="min-w-0 flex-1">
-            <div className="truncate leading-none" style={{ fontFamily: font, fontSize: 26 * dfs, textShadow: '0 3px 0 rgba(0,0,0,0.7), 0 0 10px rgba(0,0,0,0.5)' }}>
+            <div className="truncate leading-none" style={{ fontFamily: font, fontSize: 26 * dfs, textShadow: '0 3px 0 rgba(0,0,0,0.85), 0 0 8px rgba(0,0,0,0.8), 1.5px 0 0 rgba(0,0,0,0.7), -1.5px 0 0 rgba(0,0,0,0.7)' }}>
               {theme.title}
             </div>
-            <div className="font-body mt-1 truncate text-xs font-semibold text-white/90" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>
+            <div className="font-body mt-1 truncate text-xs font-semibold text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.75), 1px 0 0 rgba(0,0,0,0.6), -1px 0 0 rgba(0,0,0,0.6)' }}>
               {theme.name}
               {theme.edition ? ` · ${theme.edition}` : ''}
             </div>
@@ -309,7 +309,7 @@ function ThemeCard({ theme, focused, selected, disabled, onPick }: { theme: Them
 
       {/* tagline, colours and the button */}
       <div className="relative mt-auto px-3 pb-3">
-        <p className="font-body mb-2 line-clamp-2 text-[12.5px] font-semibold leading-snug text-white" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}>
+        <p className="font-body mb-2 line-clamp-2 text-[12.5px] font-semibold leading-snug text-white" style={{ textShadow: '0 2px 0 rgba(0,0,0,0.85), 0 0 6px rgba(0,0,0,0.75), 1px 0 0 rgba(0,0,0,0.6), -1px 0 0 rgba(0,0,0,0.6)' }}>
           {theme.tagline}
         </p>
         <div className="flex items-center gap-2">
@@ -424,7 +424,7 @@ function GameSettings({ onOpenRules }: { onOpenRules?: () => void }) {
               className={`chip flex h-14 flex-col items-center justify-center px-1 leading-none ${s.pace === p.id ? 'is-on' : ''}`}
             >
               <span className="text-[15px]">{p.label}</span>
-              <span className="font-body mt-1 text-[11px] font-semibold leading-tight opacity-80">{p.hint}</span>
+              <span className="font-body mt-1 text-[11px] font-semibold leading-tight">{p.hint}</span>
             </button>
           ))}
         </div>
@@ -440,7 +440,7 @@ function GameSettings({ onOpenRules }: { onOpenRules?: () => void }) {
               className={`chip flex h-14 flex-col items-center justify-center px-1 leading-none ${s.fx === q.id ? 'is-on' : ''}`}
             >
               <span className="text-[15px]">{q.label}</span>
-              <span className="font-body mt-1 text-[10.5px] font-semibold leading-tight opacity-80">{q.hint}</span>
+              <span className="font-body mt-1 text-[10.5px] font-semibold leading-tight">{q.hint}</span>
             </button>
           ))}
         </div>
@@ -480,7 +480,7 @@ function Slider({
   onDone?: () => void;
 }) {
   return (
-    <label className={`mt-2 block ${disabled ? 'opacity-50' : ''}`}>
+    <label className={`mt-2 block ${disabled ? 'opacity-60' : ''}`}>
       <span className="label flex justify-between">
         {label}
         <span>{Math.round(value * 100)}%</span>

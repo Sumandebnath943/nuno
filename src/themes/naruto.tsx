@@ -181,7 +181,7 @@ export const naruto: Theme = {
     '--line': '#e8cfa2',
     '--highlight': '#ffd59a',
     '--chip-hover': '#ffe8c2',
-    '--link': '#a94109',
+    '--link': '#983a08',
     '--accent-a': '#ffb257',
     '--accent-b': '#f76707',
     '--surface': '#fffaf0',

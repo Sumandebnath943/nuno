@@ -44,6 +44,7 @@ import { useSettings } from '../lib/settings';
 import { music } from '../lib/music';
 import { findTaunt } from '../lib/taunts';
 import { cardHelp } from '../lib/modeGuide';
+import { shareInvite } from '../lib/share';
 import { fx as fxEngine } from '../fx/engine';
 import { useTheme } from '../themes';
 import { AmbientCanvas, FxCanvas } from './ThemeStage';
@@ -328,12 +329,13 @@ export const GameBoard: React.FC<Props> = ({
     setMuted(next);
     if (!next) sfx.click();
   };
-  const copyInvite = () => {
+  const copyInvite = async () => {
     if (!roomId) return;
-    navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?room=${roomId}`);
     sfx.pop();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    if ((await shareInvite(roomId)) === 'copied') {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    }
   };
 
   // ── voice ────────────────────────────────────────────────
@@ -678,6 +680,7 @@ export const GameBoard: React.FC<Props> = ({
           side={view.side}
           launcher={mode === 'attack'}
           shots={fx.launcherShots}
+          riffles={fx.riffles}
         />
         <div
           className="relative"

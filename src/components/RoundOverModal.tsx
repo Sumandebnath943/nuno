@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import type { GameView } from '../game/types';
 import { cardPoints } from '../game/cards';
@@ -44,15 +44,24 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
   const knockouts = view.mode === 'nomercy' ? view.players.filter((p) => p.out).length : 0;
   const standings = view.players.map((p, i) => ({ ...p, seat: i })).sort((a, b) => b.score - a.score);
   const target = view.targetScore;
+  // Only the winner scores in a round: everyone else's total is unchanged.
+  const before = (seat: number, score: number) => (seat === winnerSeat ? Math.max(0, score - view.roundPoints) : score);
 
   return (
     <Modal open className="max-w-lg" backdrop="rgba(10, 8, 30, 0.8)">
       <div className="relative px-5 pb-5 pt-2 text-center sm:px-6">
-        <div className="relative mx-auto -mt-14 flex h-24 w-24 items-center justify-center rounded-full border-4 border-[var(--ink)] bg-[var(--surface)] text-6xl shadow-[0_5px_0_var(--ink)]">
-          <Avatar value={winner.avatar} fill />
-          <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-4xl animate-bob">👑</span>
+        <div className="relative mx-auto -mt-14 h-24 w-24">
+          <span className="winner-rays" aria-hidden="true" />
+          <div className="animate-winnerIn relative flex h-24 w-24 items-center justify-center rounded-full border-4 border-[var(--ink)] bg-[var(--surface)] text-6xl shadow-[0_5px_0_var(--ink)]">
+            <Avatar value={winner.avatar} fill />
+          </div>
+          <span className="animate-crownDrop absolute -top-8 left-1/2 text-4xl" aria-hidden="true">
+            <span className="inline-block animate-bob" style={{ animationDelay: '1.1s' }}>
+              👑
+            </span>
+          </span>
         </div>
-        <h2 className="font-display mt-3 text-2xl sm:text-4xl">
+        <h2 className="animate-turnIn font-display relative mt-3 text-2xl sm:text-4xl" style={{ animationDelay: '0.2s' }}>
           {gameOver
             ? iWon
               ? 'You win the game!'
@@ -61,7 +70,7 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
               ? 'You win the round!'
               : `${winner.name} wins the round`}
         </h2>
-        <p className="font-display mt-1 text-lg text-[var(--muted)]">
+        <p className="font-display relative mt-1 text-lg text-[var(--muted)]">
           +{view.roundPoints} points
           {knockouts > 0
             ? ` (incl. ${knockouts} knockout${knockouts === 1 ? '' : 's'} × ${KNOCKOUT_POINTS})`
@@ -75,7 +84,8 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
           {standings.map((p, rank) => (
             <div
               key={p.id}
-              className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ${p.seat === winnerSeat ? 'bg-[var(--highlight)]' : ''}`}
+              className={`animate-rowIn flex items-center gap-2 rounded-xl px-2 py-1.5 ${p.seat === winnerSeat ? 'bg-[var(--highlight)]' : ''}`}
+              style={{ animationDelay: `${0.35 + rank * 0.07}s` }}
             >
               <span className="font-display w-6 text-center text-[var(--faint)]">{rank + 1}</span>
               <span className="text-xl">
@@ -86,12 +96,10 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
                 {p.seat === view.me && <span className="text-[var(--faint)]"> (you)</span>}
                 {p.out && <span className="ml-1 rounded bg-[#ffe1e1] px-1 text-xs text-[#b3141c]">💀 OUT</span>}
               </span>
-              {target > 0 && (
-                <div className="hidden h-2.5 w-24 overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[var(--panel-2)] sm:block">
-                  <div className="h-full bg-[var(--yellow)]" style={{ width: `${Math.min(100, (p.score / target) * 100)}%` }} />
-                </div>
-              )}
-              <span className="font-display w-16 text-right">{p.score}</span>
+              {target > 0 && <ScoreBar from={before(p.seat, p.score) / target} to={p.score / target} />}
+              <span className="font-display w-16 text-right">
+                <CountUp from={before(p.seat, p.score)} to={p.score} delay={600} />
+              </span>
             </div>
           ))}
           {target > 0 && <div className="mt-1 text-xs font-semibold text-[var(--faint)]">First to {target} points wins</div>}
@@ -148,3 +156,41 @@ export const RoundOverModal: React.FC<Props> = ({ view, isHost, onNextRound, onN
     </Modal>
   );
 };
+
+/** A number that counts up to its new value. */
+function CountUp({ from, to, delay = 0, ms = 900 }: { from: number; to: number; delay?: number; ms?: number }) {
+  const [shown, setShown] = useState(from);
+  const raf = useRef(0);
+  useEffect(() => {
+    if (from === to || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setShown(to);
+      return;
+    }
+    let start = 0;
+    const step = (now: number) => {
+      if (!start) start = now + delay;
+      const u = Math.min(1, Math.max(0, (now - start) / ms));
+      const eased = 1 - Math.pow(1 - u, 3);
+      setShown(Math.round(from + (to - from) * eased));
+      if (u < 1) raf.current = requestAnimationFrame(step);
+    };
+    raf.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf.current);
+  }, [from, to, delay, ms]);
+  return <>{shown}</>;
+}
+
+/** Progress towards the target score; the winner's bar fills up to its new length. */
+function ScoreBar({ from, to }: { from: number; to: number }) {
+  const [grown, setGrown] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGrown(true), 600);
+    return () => clearTimeout(t);
+  }, []);
+  const pct = (v: number) => `${Math.min(100, Math.max(0, v * 100))}%`;
+  return (
+    <div className="hidden h-2.5 w-24 overflow-hidden rounded-full border-2 border-[var(--ink)] bg-[var(--panel-2)] sm:block">
+      <div className="h-full bg-[var(--yellow)] transition-[width] duration-[900ms] ease-out" style={{ width: pct(grown ? to : from) }} />
+    </div>
+  );
+}

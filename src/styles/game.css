@@ -219,25 +219,32 @@ textarea {
 .btn-yellow {
   background: linear-gradient(var(--accent-a), var(--accent-b));
 }
-.btn-red {
-  background: linear-gradient(#ff6b6f, #e0262e);
+/* White words on coloured buttons get a thin ink outline, so they read on every
+   shade of the gradient (the same outlined look as the card numbers). */
+.btn-red,
+.btn-green,
+.btn-blue,
+.btn-purple {
   color: #fff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  text-shadow:
+    0 2px 0 var(--ink),
+    1.5px 0 0 var(--ink),
+    -1.5px 0 0 var(--ink),
+    0 -1.5px 0 var(--ink),
+    1px 1px 0 var(--ink),
+    -1px 1px 0 var(--ink);
+}
+.btn-red {
+  background: linear-gradient(#f2545a, #c81d26);
 }
 .btn-green {
-  background: linear-gradient(#5be07d, #22a447);
-  color: #fff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  background: linear-gradient(#2fbf5b, #157a35);
 }
 .btn-blue {
-  background: linear-gradient(#6fa8ff, #2b6ce0);
-  color: #fff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  background: linear-gradient(#4b8ef2, #1f58c4);
 }
 .btn-purple {
-  background: linear-gradient(#a78bff, #6d4ce6);
-  color: #fff;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  background: linear-gradient(#8a6af0, #5530c9);
 }
 .btn-white {
   background: linear-gradient(var(--surface), var(--panel-3));
@@ -1406,4 +1413,219 @@ body {
 }
 .theme-strip::-webkit-scrollbar {
   display: none;
+}
+
+/* ── second animation pass ───────────────────────────────── */
+
+/* The dealer's riffle: the deck splits, the halves fly apart and snap back, twice. */
+.riffle {
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: 0.64s cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+.riffle-l {
+  animation-name: riffleL;
+}
+.riffle-r {
+  animation-name: riffleR;
+}
+@keyframes riffleL {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  20% {
+    transform: translate(-62%, -7%) rotate(-15deg);
+  }
+  42% {
+    transform: translate(-4%, 0) rotate(-2deg);
+  }
+  62% {
+    transform: translate(-56%, -6%) rotate(-13deg);
+  }
+  84% {
+    transform: translate(-2%, 0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 0;
+  }
+}
+@keyframes riffleR {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  20% {
+    transform: translate(62%, -7%) rotate(15deg);
+  }
+  42% {
+    transform: translate(4%, 0) rotate(2deg);
+  }
+  62% {
+    transform: translate(56%, -6%) rotate(13deg);
+  }
+  84% {
+    transform: translate(2%, 0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 0;
+  }
+}
+/* …and the squared-up deck taps the table. */
+.riffle-top {
+  animation: riffleTop 0.64s ease-out both;
+}
+@keyframes riffleTop {
+  0%,
+  82% {
+    transform: none;
+  }
+  90% {
+    transform: translateY(-9px) scale(1.04);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* A stamp slammed onto the page (BLUFF CAUGHT!). */
+@keyframes stamp {
+  0% {
+    transform: scale(3) rotate(-22deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.9) rotate(-4deg);
+    opacity: 1;
+  }
+  75% {
+    transform: scale(1.05) rotate(-7deg);
+  }
+  100% {
+    transform: scale(1) rotate(-6deg);
+    opacity: 1;
+  }
+}
+.animate-stamp {
+  animation: stamp 0.5s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+}
+
+/* Things arriving one after another (rows, revealed cards). */
+@keyframes rowIn {
+  from {
+    transform: translateY(14px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.animate-rowIn {
+  animation: rowIn 0.36s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+/* Round over: the winner bursts in on a turning fan of light, and the crown drops on. */
+@keyframes winnerIn {
+  0% {
+    transform: scale(0.2) rotate(-25deg);
+  }
+  60% {
+    transform: scale(1.15) rotate(6deg);
+  }
+  80% {
+    transform: scale(0.96) rotate(-2deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+.animate-winnerIn {
+  animation: winnerIn 0.6s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.winner-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 260%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, var(--accent-a) 0deg 9deg, transparent 9deg 22.5deg);
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 68%);
+  opacity: 0.75;
+  pointer-events: none;
+  animation:
+    fadeIn 0.5s ease-out both,
+    raysSpin 12s linear infinite;
+}
+@keyframes crownDrop {
+  0% {
+    transform: translate(-50%, -90px) rotate(-30deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(-50%, 6px) rotate(8deg);
+    opacity: 1;
+  }
+  75% {
+    transform: translate(-50%, -6px) rotate(-4deg);
+  }
+  100% {
+    transform: translate(-50%, 0) rotate(0);
+    opacity: 1;
+  }
+}
+.animate-crownDrop {
+  animation: crownDrop 0.7s cubic-bezier(0.3, 0.8, 0.4, 1) 0.35s both;
+}
+
+/* The colour wheel spins into place, wedge by wedge. */
+@keyframes wheelIn {
+  from {
+    transform: rotate(-140deg) scale(0.45);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.animate-wheelIn {
+  animation: wheelIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+.wedge-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: popIn 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+/* The colour you hold most of gently calls for attention. */
+@keyframes mostGlow {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+.most-glow {
+  animation: mostGlow 0.8s ease-in-out infinite alternate;
+}
+/* The Spin wheel's winning wedge flashes when it stops. */
+@keyframes segFlash {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.seg-flash {
+  animation: segFlash 0.5s ease-in-out 3;
 }
